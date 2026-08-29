@@ -24,24 +24,6 @@
 
 ---
 
-## 📸 Screenshots
-
-> Replace these placeholders with real screenshots from the application.
-
-<div align="center">
-
-|                   Dashboard                  |                    Weight Trend                    |
-| :------------------------------------------: | :------------------------------------------------: |
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Weight Trend](docs/screenshots/weight-trend.png) |
-
-|                Cycle Projection                |                   Nutrition                  |
-| :--------------------------------------------: | :------------------------------------------: |
-| ![Projection](docs/screenshots/projection.png) | ![Nutrition](docs/screenshots/nutrition.png) |
-
-</div>
-
----
-
 ## 🎯 What is Masscience?
 
 Masscience is a **data-driven bodyweight and nutrition management application** designed for people who want to gain muscle while keeping unnecessary fat gain under control.
