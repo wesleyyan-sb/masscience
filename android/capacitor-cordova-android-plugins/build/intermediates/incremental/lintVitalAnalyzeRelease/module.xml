@@ -1,0 +1,18 @@
+<lint-module
+    format="1"
+    dir="C:\Users\wesle\Documents\Masscience\android\capacitor-cordova-android-plugins"
+    name=":capacitor-cordova-android-plugins"
+    type="LIBRARY"
+    maven="android:capacitor-cordova-android-plugins:"
+    agpVersion="8.2.1"
+    buildFolder="build"
+    bootClassPath="C:\Users\wesle\AppData\Local\Android\Sdk\platforms\android-34\android.jar;C:\Users\wesle\AppData\Local\Android\Sdk\build-tools\34.0.0\core-lambda-stubs.jar"
+    javaSourceLevel="17"
+    compileTarget="android-34"
+    neverShrinking="true">
+  <lintOptions
+      absolutePaths="true"
+      checkReleaseBuilds="true"
+      explainIssues="true"/>
+  <variant name="release"/>
+</lint-module>
