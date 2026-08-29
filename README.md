@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <div align="center">
 
 # 🧬 Masscience
@@ -896,3 +897,119 @@ The goal is **better decisions from imperfect data**.
 **Made for people who want to bulk smarter.**
 
 </div>
+=======
+# Masscience
+
+**Lean bulk on autopilot.**
+
+Masscience is a client-side feedback-control system for lean bulking and minicut cycles. It uses bodyweight **trajectories** — not food logging — to adapt calorie recommendations.
+
+**Algorithm version:** 2.1.0
+
+## Quick Start
+
+```bash
+python -m http.server 8080
+# Open http://localhost:8080
+```
+
+- **Start** — onboarding wizard
+- **Try Demo** — 45 days of sample data with V2.1 algorithms
+
+## Run Algorithm Tests
+
+```bash
+node js/tests/run-tests.js
+node js/tests/benchmark-trend.js
+node js/tests/benchmark-mc.js
+```
+
+## Core Philosophy (V2.1)
+
+> Don't obsess over individual numbers. Watch the trajectory.
+
+- Trend weight from **rolling OLS** with outlier downweighting (not raw daily weight)
+- **Control vs composition split** — calories follow weight trajectory; BF/risk are informational
+- **BF inertia** — short-term weight swings don't swing BF estimates
+- **Monte Carlo projections** (800 sims) with model-estimated ceiling risk
+- Calorie adjustments require trend confidence ≥ 45%
+
+## File Structure
+
+```
+index.html          Entry point
+style.css           UI
+app.js              Application & pages
+js/
+  constants.js      Algorithm constants (v2.1.0)
+  trend.js          Rolling OLS trend engine
+  trajectory.js     Target trajectory & error
+  confidence.js     Separate confidence scores
+  calculations.js   BMR, macros, partitions
+  composition.js    BF fusion, inertia, MC partitions
+  control.js        Weight-trajectory calorie controller
+  adaptive.js       TDEE + trajectory risk (informational)
+  projection.js     Monte Carlo projections (800 sims)
+  cycle.js          Cycle & weigh-in frequency
+  charts.js         Canvas charts
+  demo.js           Demo dataset
+  tests/
+    run-tests.js
+    benchmark-trend.js
+    benchmark-mc.js
+ARCHITECTURE.md     Full V2.1 algorithm specification
+ALGORITHM_CHANGELOG.md
+```
+
+## Building Masscience
+
+### Prerequisites
+
+- Node.js 20+
+- npm
+- Java JDK 17+
+- Android Studio / Android SDK for Android packaging
+- Git
+
+### Commands
+
+```bat
+build.bat all
+build.bat web
+build.bat windows
+build.bat linux
+build.bat android
+build.bat clean
+```
+
+### npm scripts
+
+```bash
+npm test
+npm run web
+npm run build:web
+npm run build:windows
+npm run build:linux
+npm run build:android
+npm run build:all
+```
+
+### CI / release
+
+- GitHub Actions workflow is configured in [.github/workflows/build.yml](.github/workflows/build.yml)
+- Detailed build instructions are in [BUILD.md](BUILD.md)
+- Architecture notes are in [BUILD_ARCHITECTURE.md](BUILD_ARCHITECTURE.md)
+
+## Documentation
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — Complete V2.1 algorithm reference for developers
+- **[ALGORITHM_CHANGELOG.md](ALGORITHM_CHANGELOG.md)** — V1→V2.1 audit summary
+
+## Privacy
+
+All data in `localStorage`. Export/import JSON backup. No server.
+
+## Disclaimer
+
+Tracking and estimation tool — not a medical device. Consult qualified professionals for personalized advice.
+>>>>>>> 778cda1 (initial version)

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Masscience</string>
+    <string name="title_activity_main">Masscience</string>
+    <string name="package_name">com.masscience.app</string>
+    <string name="custom_url_scheme">com.masscience.app</string>
+</resources>
