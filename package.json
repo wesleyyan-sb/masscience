@@ -1,6 +1,6 @@
 {
   "name": "masscience",
-  "version": "2.1.5",
+  "version": "2.1.6",
   "description": "Masscience — lean bulk on autopilot",
   "type": "module",
   "private": true,
