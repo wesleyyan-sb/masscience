@@ -2,7 +2,7 @@
  * Masscience — Main application
  */
 import {
-  loadState, saveState, exportData, importData, resetData,
+  loadState, saveState, exportData, exportCycleReport, importData, resetData,
   saveAutoBackup, getLatestBackup, restoreLatestBackup, clearAutoBackups,
   getDataHealthSummary,
 } from './js/storage.js';
@@ -60,7 +60,8 @@ class MasscienceApp {
     this.state = advanceCyclePhase(currentState, currentState.settings);
     const state = this.state;
     const startDate = state.currentCycle.startDate;
-    const trendData = processWeightData(state.weightMeasurements, startDate);
+    const phaseStartDate = state.currentCycle.phaseStartDate || startDate;
+    const trendData = processWeightData(state.weightMeasurements, startDate, { phaseStartDate });
 
     const phase = state.currentCycle.phase;
     const currentWeight = trendData.latest?.trend || state.profile.weightKg;
@@ -71,6 +72,10 @@ class MasscienceApp {
       ? trendData.latest.trend - state.currentCycle.initialWeight
       : 0;
 
+    const phaseProgress = getPhaseProgress(state.currentCycle);
+    state.algorithmState.currentPhase = phase;
+    state.algorithmState.daysInPhase = phaseProgress.dayInPhase;
+
     const compResult = estimateBodyComposition(
       state.profile, trendData, state.bodyMeasurements, state.algorithmState
     );
@@ -78,7 +83,6 @@ class MasscienceApp {
     const currentCalories = state.algorithmState.currentCalories;
     const tdeeResult = estimateAdaptiveTDEE(state, trendData, currentCalories);
 
-    const phaseProgress = getPhaseProgress(state.currentCycle);
     trendData.phaseDaysRemaining = phaseProgress.remainingWeeks * 7;
 
     const trajectoryError = calculateTrajectoryError(
@@ -106,6 +110,23 @@ class MasscienceApp {
     state.algorithmState.tdeeRange = { low: tdeeResult.low, high: tdeeResult.high };
     state.algorithmState.consistencyScore = consistency;
     state.algorithmState.smoothedBf = bfEstimate.smoothedBfForStorage ?? bfEstimate.estimate;
+    if (compResult._state) {
+      if (compResult._state.recentWeightDirection != null) {
+        state.algorithmState.recentWeightDirection = compResult._state.recentWeightDirection;
+      }
+      if (compResult._state.bfTargetHistory != null) {
+        state.algorithmState.bfTargetHistory = compResult._state.bfTargetHistory;
+      }
+      if (compResult._state.estimatedFatMassKg != null) {
+        state.algorithmState.estimatedFatMassKg = compResult._state.estimatedFatMassKg;
+      }
+      if (compResult._state.prevTrendWeightForBf != null) {
+        state.algorithmState.prevTrendWeightForBf = compResult._state.prevTrendWeightForBf;
+      }
+      if (compResult._state.bfLastEnergyDate != null) {
+        state.algorithmState.bfLastEnergyDate = compResult._state.bfLastEnergyDate;
+      }
+    }
     state.algorithmVersion = ALGORITHM_VERSION;
 
     this.computed = {
@@ -203,6 +224,7 @@ class MasscienceApp {
       } break;
       case 'apply-calories': this.applyCalorieAdjustment(); break;
       case 'export': exportData(this.state); break;
+      case 'export-report': exportCycleReport(this.state, this.computed); break;
       case 'import': document.getElementById('import-file').click(); break;
       case 'backup-now':
         saveAutoBackup(this.state);
@@ -613,10 +635,18 @@ class MasscienceApp {
     const projBf = c.projection?.bf;
     const waterMl = typeof c.water === 'object' ? c.water.ml : c.water;
 
+    let transitionBanner = '';
+    const daysSinceSwitch = state.algorithmState?.daysSincePhaseSwitch ?? state.algorithmState?.daysInPhase ?? 999;
+    if (daysSinceSwitch <= 10 && cycle.phase) {
+      transitionBanner = `<div class="card card-info"><strong>Phase Transition (Day ${daysSinceSwitch}/10)</strong>
+        <p class="hint">Stabilizing transient glycogen and water storage. Controller is in damped transition mode.</p></div>`;
+    }
+
     return `
       ${trustBanner}
       ${health.warnings.length ? `<div class="card card-warning"><strong>Data check</strong><p class="hint">${health.warnings.join(' ')}</p></div>` : ''}
       ${calBanner}
+      ${transitionBanner}
       ${c.risk?.level === 'HIGH' || c.risk?.level === 'MODERATE' ? `
       <div class="card card-warning"><strong>Estimated trajectory risk: ${c.risk.label || c.risk.level}</strong><p>${escapeHtml(c.risk.message)}</p>
         ${c.risk.modelProbability != null ? `<p class="hint">~${Math.round(c.risk.modelProbability * 100)}% model-estimated probability (not clinical). ${escapeHtml(c.risk.disclaimer || '')}</p>` : ''}</div>` : ''}
@@ -727,14 +757,14 @@ class MasscienceApp {
         <canvas id="chart-calories" class="chart" height="160"></canvas>
       </div>
       <div class="card">
-        <h3>TDEE Learning</h3>
+        <h3>Aprendizado Adaptativo do TDEE</h3>
         <div class="tdee-display">
-          <div><span class="stat-label">Initial TDEE</span><span>${formatCalories(state.currentCycle.initialTDEE)}</span></div>
-          <div><span class="stat-label">Estimated TDEE</span><span>${formatCalories(c.tdeeResult?.estimate ?? state.algorithmState.estimatedTDEE)}</span></div>
-          <div><span class="stat-label">Likely range</span><span>${formatCalories(c.tdeeResult?.low)} – ${formatCalories(c.tdeeResult?.high)}</span></div>
-          <div><span class="stat-label">Confidence</span><span>${formatConfidenceLabel(c.tdeeResult?.confidenceDetail?.label)} (${state.algorithmState.tdeeConfidence}%)</span></div>
+          <div><span class="stat-label">TDEE Inicial</span><span>${formatCalories(state.currentCycle.initialTDEE)}</span></div>
+          <div><span class="stat-label">TDEE Estimado</span><span>${formatCalories(c.tdeeResult?.estimate ?? state.algorithmState.estimatedTDEE)} / dia</span></div>
+          <div><span class="stat-label">Faixa Provável</span><span>${formatCalories(c.tdeeResult?.low)} – ${formatCalories(c.tdeeResult?.high)}</span></div>
+          <div><span class="stat-label">Confiança</span><span>${formatConfidenceLabel(c.tdeeResult?.confidenceDetail?.label)} (${state.algorithmState.tdeeConfidence}%)</span></div>
         </div>
-        <p class="hint">${escapeHtml(c.tdeeResult?.note || 'Derived from calorie target + weight trend — not lab measurement.')}</p>
+        <p class="hint">TDEE estimado probabilístico com faixa provável de incerteza (±${c.tdeeResult?.uncertainty ?? 180} kcal). Flutuações agudas de glicogênio e hidratação são isoladas para evitar oscilações artificiais.</p>
       </div>`;
   }
 
@@ -790,15 +820,28 @@ class MasscienceApp {
 
     return `
       <h2 class="page-title">Body</h2>
-      <p class="hint">${c.bfEstimate.note || 'Lean mass ≠ skeletal muscle'}</p>
+      <p class="hint">${c.bfEstimate.note || 'Massa livre de gordura estimada ≠ tecido muscular isolado'}</p>
       <div class="card-grid">
-        <div class="card card-stat"><span class="stat-label">Trend Weight</span><span class="stat-value">${formatWeight(weight, units)}</span></div>
-        <div class="card card-stat"><span class="stat-label">Est. BF</span><span class="stat-value">~${c.bfEstimate.low}–${c.bfEstimate.high}%</span><span class="stat-hint">${formatConfidenceLabel(c.bfEstimate.confidenceDetail?.label)}</span></div>
-        <div class="card card-stat"><span class="stat-label">Est. Lean Mass</span><span class="stat-value">${formatWeight(comp.leanMass.low, units)}–${formatWeight(comp.leanMass.high, units)}</span></div>
-        <div class="card card-stat"><span class="stat-label">Est. Fat Mass</span><span class="stat-value">${formatWeight(comp.fatMass.low, units)}–${formatWeight(comp.fatMass.high, units)}</span></div>
-        <div class="card card-stat"><span class="stat-label">Est. FFMI</span><span class="stat-value">~${round(ffmi, 1)}</span></div>
+        <div class="card card-stat"><span class="stat-label">Peso de tendência</span><span class="stat-value">${formatWeight(weight, units)}</span></div>
+        <div class="card card-stat"><span class="stat-label">Gordura corporal estimada (%BF)</span><span class="stat-value">~${c.bfEstimate.low}–${c.bfEstimate.high}%</span><span class="stat-hint">${formatConfidenceLabel(c.bfEstimate.confidenceDetail?.label)}</span></div>
+        <div class="card card-stat"><span class="stat-label">Massa livre de gordura estimada</span><span class="stat-value">${formatWeight(comp.leanMass.low, units)}–${formatWeight(comp.leanMass.high, units)}</span></div>
+        <div class="card card-stat"><span class="stat-label">Tecido adiposo estimado</span><span class="stat-value">${formatWeight(comp.fatMass.low, units)}–${formatWeight(comp.fatMass.high, units)}</span></div>
+        <div class="card card-stat"><span class="stat-label">FFMI estimado</span><span class="stat-value">~${round(ffmi, 1)}</span></div>
       </div>
       <button class="btn btn-secondary" data-action="update-bf">Update BF Estimate</button>
+
+      <div class="card">
+        <h3>Modelo Fisiológico Latente (6 Compartimentos)</h3>
+        <p class="hint">Com base nos seus dados e no comportamento observado, nosso modelo estima uma faixa provável de ganho muscular e gordura. Os resultados podem variar significativamente devido à genética, treinamento, dieta, sono e mudanças na atividade.</p>
+        <div class="macro-grid">
+          <div><span class="macro-label">Massa muscular estimada</span><span class="macro-value">${formatWeight(comp.contractileMuscle?.low, units)}–${formatWeight(comp.contractileMuscle?.high, units)}</span></div>
+          <div><span class="macro-label">Massa magra estrutural</span><span class="macro-value">~${formatWeight(comp.structuralLean?.mid, units)}</span></div>
+          <div><span class="macro-label">Glicogênio estimado</span><span class="macro-value">~${comp.glycogen?.mid} kg</span></div>
+          <div><span class="macro-label">Água corporal estimada</span><span class="macro-value">~${formatWeight(comp.hydrationWater?.mid, units)}</span></div>
+          <div><span class="macro-label">Conteúdo digestivo</span><span class="macro-value">~${comp.digestive?.mid} kg</span></div>
+          <div><span class="macro-label">Tecido adiposo estimado</span><span class="macro-value">${formatWeight(comp.fatMass.low, units)}–${formatWeight(comp.fatMass.high, units)}</span></div>
+        </div>
+      </div>
 
       <div class="card">
         <h3>Body Check</h3>
@@ -952,6 +995,11 @@ class MasscienceApp {
         <p>${state.weightMeasurements.filter(m => !m.isEstimated).length} measured · ${state.weightMeasurements.filter(m => m.isEstimated).length} estimated</p>
       </div>
       <div class="card">
+        <h3>Scientific Cycle Report</h3>
+        <p class="hint">Export the complete compartmental report with 6-compartment body estimates, latent TDEE tracking, and controller adjustments.</p>
+        <button class="btn btn-primary" data-action="export-report">Download Scientific Cycle Report</button>
+      </div>
+      <div class="card">
         <h3>Calorie History</h3>
         ${state.calorieHistory.slice().reverse().map(c => `
           <div class="history-entry">
@@ -973,9 +1021,15 @@ class MasscienceApp {
         <p>${state.profile.sex}, ${state.profile.age} yrs · ${formatHeight(state.profile.heightCm, state.settings.units)} · ${formatWeight(state.profile.weightKg, state.settings.units)}</p>
       </div>
       <div class="card">
+        <h3>Reports & Exports</h3>
+        <div class="btn-row">
+          <button class="btn btn-primary" data-action="export-report">Download Cycle Report (JSON)</button>
+          <button class="btn btn-secondary" data-action="export">Full State Backup (JSON)</button>
+        </div>
+      </div>
+      <div class="card">
         <h3>Backup & Recovery</h3>
         <div class="btn-row">
-          <button class="btn btn-secondary" data-action="export">Download backup JSON</button>
           <button class="btn btn-secondary" data-action="backup-now">Create local backup</button>
         </div>
         <div class="btn-row">

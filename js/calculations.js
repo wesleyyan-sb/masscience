@@ -86,13 +86,30 @@ export function compositionFromBF(weightKg, bfPercent) {
 }
 
 export function compositionRange(weightKg, bfEstimate) {
-  const low = compositionFromBF(weightKg, bfEstimate.high);
+  const low = compositionFromBF(weightKg, bfEstimate.high ?? (bfEstimate.estimate + (bfEstimate.uncertainty || 2)));
   const mid = compositionFromBF(weightKg, bfEstimate.estimate);
-  const high = compositionFromBF(weightKg, bfEstimate.low);
+  const high = compositionFromBF(weightKg, bfEstimate.low ?? (bfEstimate.estimate - (bfEstimate.uncertainty || 2)));
+
+  // 6-compartment latent estimates
+  const estTotalLean = mid.leanMass;
+  const estMuscleMid = round(estTotalLean * 0.46, 1);
+  const estMuscleLow = round(low.leanMass * 0.45, 1);
+  const estMuscleHigh = round(high.leanMass * 0.47, 1);
+
+  const estStructuralMid = round(estTotalLean * 0.24, 1);
+  const estGlycogenMid = 0.5;
+  const estDigestiveMid = 0.6;
+  const estWaterMid = round(estTotalLean - estMuscleMid - estStructuralMid - estGlycogenMid - estDigestiveMid, 1);
+
   return {
     fatMass: { low: round(low.fatMass, 1), mid: round(mid.fatMass, 1), high: round(high.fatMass, 1) },
     leanMass: { low: round(low.leanMass, 1), mid: round(mid.leanMass, 1), high: round(high.leanMass, 1) },
-    note: 'Lean mass ≠ skeletal muscle',
+    contractileMuscle: { low: estMuscleLow, mid: estMuscleMid, high: estMuscleHigh },
+    structuralLean: { mid: estStructuralMid },
+    glycogen: { mid: estGlycogenMid },
+    hydrationWater: { mid: Math.max(10, estWaterMid) },
+    digestive: { mid: estDigestiveMid },
+    note: 'Contractile muscle ≠ total lean mass. Hydration and glycogen vary with nutrition and training.',
   };
 }
 
@@ -118,7 +135,47 @@ export function navyBodyFat(sex, waistCm, neckCm, heightCm, hipCm = null) {
 
 /** Delegates to composition system (V2.1) */
 export function estimateBodyFat(profile, trendData, bodyMeasurements = [], algorithmState = {}) {
-  return estimateBodyComposition(profile, trendData, bodyMeasurements, algorithmState).bf;
+  const res = estimateBodyComposition(profile, trendData, bodyMeasurements, algorithmState);
+  if (res._state && algorithmState && typeof algorithmState === 'object') {
+    if (res._state.recentWeightDirection != null) {
+      algorithmState.recentWeightDirection = res._state.recentWeightDirection;
+    }
+    if (res._state.bfTargetHistory != null) {
+      algorithmState.bfTargetHistory = res._state.bfTargetHistory;
+    }
+    if (res._state.estimatedFatMassKg != null) {
+      algorithmState.estimatedFatMassKg = res._state.estimatedFatMassKg;
+    }
+    if (res._state.prevTrendWeightForBf != null) {
+      algorithmState.prevTrendWeightForBf = res._state.prevTrendWeightForBf;
+    }
+    if (res._state.bfLastEnergyDate != null) {
+      algorithmState.bfLastEnergyDate = res._state.bfLastEnergyDate;
+    }
+  }
+  return res.bf;
+}
+
+export function estimateBodyCompositionFull(profile, trendData, bodyMeasurements = [], algorithmState = {}) {
+  const res = estimateBodyComposition(profile, trendData, bodyMeasurements, algorithmState);
+  if (res._state && algorithmState && typeof algorithmState === 'object') {
+    if (res._state.recentWeightDirection != null) {
+      algorithmState.recentWeightDirection = res._state.recentWeightDirection;
+    }
+    if (res._state.bfTargetHistory != null) {
+      algorithmState.bfTargetHistory = res._state.bfTargetHistory;
+    }
+    if (res._state.estimatedFatMassKg != null) {
+      algorithmState.estimatedFatMassKg = res._state.estimatedFatMassKg;
+    }
+    if (res._state.prevTrendWeightForBf != null) {
+      algorithmState.prevTrendWeightForBf = res._state.prevTrendWeightForBf;
+    }
+    if (res._state.bfLastEnergyDate != null) {
+      algorithmState.bfLastEnergyDate = res._state.bfLastEnergyDate;
+    }
+  }
+  return res;
 }
 
 /** Target gain as % bodyweight/week → kg/week */

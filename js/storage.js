@@ -133,6 +133,54 @@ export function exportData(state) {
   URL.revokeObjectURL(url);
 }
 
+export function exportCycleReport(state, computed) {
+  const report = {
+    generatedAt: new Date().toISOString(),
+    profile: state.profile,
+    currentCycle: state.currentCycle,
+    algorithmVersion: state.algorithmVersion || ALGORITHM_VERSION,
+    appVersion: APP_VERSION,
+    disclaimer: 'Com base nos seus dados e no comportamento observado, nosso modelo estima uma faixa provável de ganho muscular e gordura. Os resultados podem variar significativamente devido à genética, treinamento, dieta, sono e mudanças na atividade.',
+    measurementsSummary: {
+      totalLoggedWeighIns: state.weightMeasurements.length,
+      measuredCount: state.weightMeasurements.filter(m => !m.isEstimated).length,
+      estimatedCount: state.weightMeasurements.filter(m => m.isEstimated).length,
+    },
+    latestStatus: {
+      trendWeightKg: computed.trendData?.latest?.trend ?? state.profile.weightKg,
+      rateKgPerWeek: computed.trendData?.rate?.perWeek ?? 0,
+      targetRateKgPerWeek: computed.gainRange?.target ?? 0,
+      trendConfidenceScore: computed.trendData?.confidence ?? 0,
+      estimatedTDEEKcal: computed.tdeeResult?.estimate ?? state.algorithmState.estimatedTDEE,
+      tdeeLikelyRange: { low: computed.tdeeResult?.low, high: computed.tdeeResult?.high },
+      estimatedBodyFatPercent: computed.bfEstimate?.estimate,
+      bodyFatLikelyRange: { low: computed.bfEstimate?.low, high: computed.bfEstimate?.high },
+      recommendedCaloriesKcal: computed.calorieAdj?.recommendedCalories,
+      appliedIntakeCaloriesKcal: state.algorithmState.currentCalories,
+    },
+    sixCompartmentsEstimate: {
+      massaMuscularEstimada: computed.compRange?.contractileMuscle,
+      tecidoAdiposoEstimado: computed.compRange?.fatMass,
+      massaLivreDeGorduraEstimada: computed.compRange?.leanMass,
+      massaMagraEstrutural: computed.compRange?.structuralLean,
+      aguaCorporalEstimada: computed.compRange?.hydrationWater,
+      glicogenioEstimado: computed.compRange?.glycogen,
+      conteudoDigestivoEstimado: computed.compRange?.digestive,
+    },
+    scenarios: computed.scenarios,
+    calorieAdjustmentHistory: state.calorieHistory,
+    cycleHistory: state.cycleHistory,
+  };
+
+  const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `masscience-cycle-report-${today()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function importData(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

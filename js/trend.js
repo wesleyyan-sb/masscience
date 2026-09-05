@@ -11,14 +11,14 @@ import {
 } from './utils.js';
 import { calculateTrendConfidence } from './confidence.js';
 
-export function processWeightData(measurements, startDate) {
+export function processWeightData(measurements, startDate, options = {}) {
   if (!measurements.length) return emptyTrendResult();
 
   const sorted = [...measurements].sort((a, b) => a.date.localeCompare(b.date));
   const measuredOnly = sorted.filter(m => !m.isEstimated);
-  const regression = fitRollingTrend(measuredOnly, startDate);
+  const regression = fitRollingTrend(measuredOnly, startDate, options);
   const series = buildTrendSeries(sorted, startDate, regression);
-  const rate = calculateRateOfGain(series, measuredOnly, startDate);
+  const rate = calculateRateOfGain(series, measuredOnly, startDate, options);
   const residualCv = computeResidualCv(series);
   const estimatedStreak = countEstimatedStreak(sorted);
   const measuredCount = measuredOnly.length;
@@ -61,18 +61,61 @@ function emptyTrendResult() {
   };
 }
 
-function fitRollingTrend(measuredOnly, startDate) {
+function fitRollingTrend(measuredOnly, startDate, options = {}) {
   if (measuredOnly.length < TREND.MIN_MEASUREMENTS) return null;
 
-  const window = clamp(measuredOnly.length, TREND.WINDOW_MIN_DAYS, TREND.WINDOW_DEFAULT_DAYS);
-  const win = measuredOnly.slice(-window);
+  const phaseStart = options.phaseStartDate;
+  let win;
+  let window;
+
+  if (phaseStart) {
+    const inPhase = measuredOnly.filter(m => m.date >= phaseStart);
+    if (inPhase.length >= TREND.MIN_MEASUREMENTS) {
+      window = clamp(inPhase.length, TREND.WINDOW_MIN_DAYS, TREND.WINDOW_DEFAULT_DAYS);
+      win = measuredOnly.slice(-window);
+    } else {
+      window = clamp(measuredOnly.length, TREND.WINDOW_MIN_DAYS, TREND.WINDOW_DEFAULT_DAYS);
+      win = measuredOnly.slice(-window);
+    }
+  } else {
+    window = clamp(measuredOnly.length, TREND.WINDOW_MIN_DAYS, TREND.WINDOW_DEFAULT_DAYS);
+    win = measuredOnly.slice(-window);
+  }
+
   const points = win.map(m => ({
     x: startDate ? daysBetween(startDate, m.date) : 0,
     y: effectiveWeight(m),
   }));
-  const weights = win.map(m => m.isOutlier ? TREND.WEIGHT_OUTLIER : TREND.WEIGHT_MEASURED);
+  const weights = win.map((m, idx) => {
+    let w = m.isOutlier ? TREND.WEIGHT_OUTLIER : localOutlierWeight(win, idx);
+    if (phaseStart && m.date < phaseStart) {
+      const daysPrior = Math.max(1, daysBetween(m.date, phaseStart));
+      w *= clamp(Math.pow(0.5, daysPrior / 2.0), 0.04, 0.25);
+    }
+    return w;
+  });
 
   return { ...weightedLinearRegression(points, weights), windowDays: window };
+}
+
+function localOutlierWeight(series, index) {
+  const window = series.slice(Math.max(0, index - 5), Math.min(series.length, index + 6));
+  if (window.length < 4) return TREND.WEIGHT_MEASURED;
+
+  const med = median(window.map(m => m.weight));
+  const madVal = mad(window.map(m => m.weight));
+  const delta = Math.abs(series[index].weight - med);
+
+  if (madVal > 0) {
+    const z = Math.abs(0.6745 * delta / madVal);
+    if (z > TREND.OUTLIER_MAD_THRESHOLD || delta > TREND.OUTLIER_FIXED_KG) {
+      return TREND.WEIGHT_OUTLIER;
+    }
+  } else if (delta > TREND.OUTLIER_FIXED_KG) {
+    return TREND.WEIGHT_OUTLIER;
+  }
+
+  return TREND.WEIGHT_MEASURED;
 }
 
 function effectiveWeight(m) {
@@ -99,24 +142,51 @@ function buildTrendSeries(sorted, startDate, regression) {
   });
 }
 
-export function calculateRateOfGain(series, measuredOnly, startDate) {
-  const measured = measuredOnly ?? series.filter(s => s.measured != null);
-  if (measured.length < TREND.MIN_MEASUREMENTS_FOR_RATE) {
+export function calculateRateOfGain(series, measuredOnly, startDate, options = {}) {
+  const usable = (measuredOnly && measuredOnly.length)
+    ? measuredOnly
+    : series.filter(s => s.measured != null || s.estimated != null);
+
+  if (!usable.length) {
     return { perDay: null, perWeek: null, perWeekPercent: null, r2: 0, standardError: null, insufficient: true, windowDays: 0 };
   }
 
-  const window = clamp(measured.length, TREND.WINDOW_MIN_DAYS, TREND.WINDOW_DEFAULT_DAYS);
-  const win = measured.slice(-window);
+  const phaseStart = options.phaseStartDate;
+  let win;
+  let window;
+
+  if (phaseStart) {
+    const inPhase = usable.filter(m => m.date >= phaseStart);
+    if (inPhase.length >= TREND.MIN_MEASUREMENTS) {
+      window = clamp(inPhase.length, TREND.WINDOW_MIN_DAYS, TREND.WINDOW_DEFAULT_DAYS);
+      win = usable.slice(-window);
+    } else {
+      window = clamp(usable.length, TREND.WINDOW_MIN_DAYS, TREND.WINDOW_DEFAULT_DAYS);
+      win = usable.slice(-window);
+    }
+  } else {
+    window = clamp(usable.length, TREND.WINDOW_MIN_DAYS, TREND.WINDOW_DEFAULT_DAYS);
+    win = usable.slice(-window);
+  }
+
   const points = win.map(m => ({
-    x: startDate ? daysBetween(startDate, m.date) : m.dayIndex,
+    x: startDate ? daysBetween(startDate, m.date) : (m.dayIndex ?? 0),
     y: effectiveWeight(m),
   }));
-  const weights = win.map(m => m.isOutlier ? TREND.WEIGHT_OUTLIER : TREND.WEIGHT_MEASURED);
+  const weights = win.map((m, idx) => {
+    let w = m.isOutlier ? TREND.WEIGHT_OUTLIER : (m.isEstimated ? TREND.WEIGHT_ESTIMATED : localOutlierWeight(win, idx));
+    if (phaseStart && m.date < phaseStart) {
+      const daysPrior = Math.max(1, daysBetween(m.date, phaseStart));
+      w *= clamp(Math.pow(0.5, daysPrior / 2.0), 0.04, 0.25);
+    }
+    return w;
+  });
   const reg = weightedLinearRegression(points, weights);
 
-  const latestWeight = series[series.length - 1]?.trend ?? points[points.length - 1].y;
+  const latestWeight = series[series.length - 1]?.trend ?? points[points.length - 1]?.y ?? 0;
   const perWeek = reg.slope * 7;
-  const slopeSE = reg.standardError / Math.sqrt(window || 1);
+  const slopeSE = reg.standardError / Math.sqrt(Math.max(window, 2));
+  const insufficient = win.length < TREND.MIN_MEASUREMENTS_FOR_RATE;
 
   return {
     perDay: reg.slope,
@@ -124,7 +194,7 @@ export function calculateRateOfGain(series, measuredOnly, startDate) {
     perWeekPercent: latestWeight > 0 ? round((perWeek / latestWeight) * 100, 3) : null,
     r2: round(reg.r2, 3),
     standardError: round(slopeSE * 7, 3),
-    insufficient: false,
+    insufficient,
     windowDays: window,
   };
 }
