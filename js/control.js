@@ -2,7 +2,7 @@
  * Masscience V2.1 — Control system (weight trajectory ONLY)
  * Composition/BF never directly changes calories — constraint/warning only.
  */
-import { CALORIES, STATUS, PHASE } from './constants.js';
+import { CALORIES, STATUS, PHASE, MINICUT_CONFIG } from './constants.js';
 import { clamp, round, daysBetween, today } from './utils.js';
 
 export function calculateCalorieAdjustment(state, trendData, gainRange, phase, trajectoryError) {
@@ -151,6 +151,18 @@ export function calculateCalorieAdjustment(state, trendData, gainRange, phase, t
     CALORIES.MAX_CALORIES
   );
   recommended = applySafetyBounds(recommended, state.profile, phase);
+
+  // Hard limit: NEVER exceed 650 kcal deficit in minicut
+  if (phase === PHASE.MINICUT) {
+    const tdee = state.algorithmState?.estimatedTDEE;
+    if (tdee != null && tdee > 0) {
+      const minCutFloor = Math.round(tdee - (MINICUT_CONFIG?.MAX_DEFICIT_KCAL ?? 650));
+      if (recommended < minCutFloor) {
+        recommended = minCutFloor;
+      }
+    }
+  }
+
   adjustment = recommended - currentCalories;
 
   const status = deriveStatus(combinedError, deadband, phase);

@@ -2,8 +2,8 @@
  * Masscience Algorithm V2.1 — Constants
  * See ARCHITECTURE.md. Values marked (H) are heuristics, not lab-validated.
  */
-export const ALGORITHM_VERSION = '2.1.6';
-export const APP_VERSION = '2.1.6';
+export const ALGORITHM_VERSION = '2.1.8';
+export const APP_VERSION = '2.1.8';
 export const STORAGE_KEY = 'masscience_data';
 
 export const CYCLE = {
@@ -11,6 +11,15 @@ export const CYCLE = {
   MINICUT_WEEKS: 3,
   CALIBRATION_DAYS: 10,
   EOD_EVAL_DAYS: 7,
+};
+
+export const MINICUT_CONFIG = {
+  PREFERRED_DAYS: 21,
+  MIN_STABILIZATION_DAYS: 14,
+  MAX_DEFICIT_KCAL: 650,
+  MIN_DEFICIT_KCAL: 300,
+  BF_TOLERANCE: 0.3,
+  SAFETY_CEILING_DAYS: 70,
 };
 
 export const CALORIES = {
@@ -60,7 +69,10 @@ export const BODY_COMP = {
   MAX_BF: 50,
   /** (H) heuristic spread for fusion — not validated SDs */
   SIGMA_USER_BF: 3.0,
-  SIGMA_NAVY_BF: 4.0,
+  SIGMA_NAVY_BF: 5.5,
+  SIGMA_DEXA_BF: 1.2,
+  SIGMA_CALIPER_BF: 1.8,
+  SIGMA_BIA_BF: 3.5,
   BULK_LEAN_FRAC: { min: 0.40, mid: 0.55, max: 0.70 },
   /** Minicut partition RANGES (H) — sampled in MC, not fixed */
   MINICUT_EARLY: {

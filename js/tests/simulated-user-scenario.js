@@ -3,9 +3,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { processWeightData, estimateMissingWeights } from '../trend.js';
 import { calculateCalorieAdjustment } from '../control.js';
-import { recommendedGainRange, estimateBodyFat, calculateInitialTDEE, initialCalorieTarget } from '../calculations.js';
+import { recommendedGainRange, estimateBodyFat, calculateInitialTDEE, initialCalorieTarget, planMinicutEnergyTarget } from '../calculations.js';
 import { estimateAdaptiveTDEE } from '../adaptive.js';
-import { PHASE, CALORIES } from '../constants.js';
+import { PHASE, CALORIES, MINICUT_CONFIG } from '../constants.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -182,8 +182,8 @@ export function run180DaySimulation(seed = SEED, options = {}) {
 
   const schedule = options.schedule || [
     { name: PHASE.BULK, days: 70, id: 'bulk_1' },
-    { name: PHASE.MINICUT, days: 28, id: 'minicut' },
-    { name: PHASE.BULK, days: 82, id: 'bulk_2' },
+    { name: PHASE.MINICUT, days: MINICUT_CONFIG?.PREFERRED_DAYS ?? 21, id: 'minicut' },
+    { name: PHASE.BULK, days: 89, id: 'bulk_2' },
   ];
 
   /* ---- 6 COMPARTMENTS (Ground Truth initial state) ---- */
@@ -245,12 +245,17 @@ export function run180DaySimulation(seed = SEED, options = {}) {
   let calorieAdjustmentHistory = [];
   let estimatedTDEE_state = initialTDEE;
 
-  /* ---- Phase tracking ---- */
+  /* ---- Phase tracking & dynamic minicut controller state ---- */
   let currentPhaseIndex = 0;
   let daysInCurrentPhase = 0;
   let prevPhase = schedule[0].name;
   let daysSincePhaseSwitch = 0;
   const calorieSmoothQueue = [];
+
+  const startingCycleBodyFat = profile.bodyFatPercent;
+  let minicutAudit = null;
+  let minicutPlanAtStart = null;
+  const minicutDailyDeficits = [];
 
   /* ---- Metrics tracking ---- */
   let oscillationCount = 0;
@@ -267,23 +272,89 @@ export function run180DaySimulation(seed = SEED, options = {}) {
     const currentDate = addDays(startDate, day);
 
     // -------- PHASE TRANSITIONS --------
-    if (daysInCurrentPhase >= schedule[currentPhaseIndex].days
-        && currentPhaseIndex < schedule.length - 1) {
+    const currentPhaseConfig = schedule[currentPhaseIndex];
+    const isMinicut = currentPhaseConfig.name === PHASE.MINICUT;
+    let shouldExitPhase = false;
+
+    if (isMinicut) {
+      // Dynamic minicut exit check:
+      // 1. Minimum stabilization window: 14 days
+      // 2. Primary objective: smoothedBf <= startingCycleBodyFat + tolerance (0.3 p.p.)
+      // 3. Safety ceiling: 70 days
+      const targetBf = startingCycleBodyFat;
+      const reachedTarget = smoothedBf <= (targetBf + (MINICUT_CONFIG?.BF_TOLERANCE ?? 0.3));
+      const hitSafetyCeiling = daysInCurrentPhase >= (MINICUT_CONFIG?.SAFETY_CEILING_DAYS ?? 70);
+
+      if (daysInCurrentPhase >= (MINICUT_CONFIG?.MIN_STABILIZATION_DAYS ?? 14) && (reachedTarget || hitSafetyCeiling)) {
+        shouldExitPhase = true;
+      }
+    } else {
+      if (daysInCurrentPhase >= currentPhaseConfig.days) {
+        shouldExitPhase = true;
+      }
+    }
+
+    if (shouldExitPhase && currentPhaseIndex < schedule.length - 1) {
       prevPhase = schedule[currentPhaseIndex].name;
+      // Record actual days spent in phase
+      schedule[currentPhaseIndex].days = daysInCurrentPhase;
+
       currentPhaseIndex++;
       daysInCurrentPhase = 0;
       daysSincePhaseSwitch = 0;
       const newPhase = schedule[currentPhaseIndex].name;
 
+      if (prevPhase === PHASE.MINICUT) {
+        const actualAvgDeficit = minicutDailyDeficits.length
+          ? Math.round(minicutDailyDeficits.reduce((a, b) => a + b, 0) / minicutDailyDeficits.length)
+          : 0;
+        const actualDaysSpent = schedule[currentPhaseIndex - 1].days;
+        const preferredDays = MINICUT_CONFIG?.PREFERRED_DAYS ?? 21;
+        const extensionDays = Math.max(0, actualDaysSpent - preferredDays);
+        minicutAudit = {
+          startingBf: startingCycleBodyFat,
+          targetBf: startingCycleBodyFat,
+          tolerance: MINICUT_CONFIG?.BF_TOLERANCE ?? 0.3,
+          initialRequiredDeficit: minicutPlanAtStart ? minicutPlanAtStart.requiredDeficit : null,
+          maximumAllowedDeficit: MINICUT_CONFIG?.MAX_DEFICIT_KCAL ?? 650,
+          actualAverageDeficit: actualAvgDeficit,
+          preferredDays,
+          actualDays: actualDaysSpent,
+          extensionRequired: extensionDays > 0,
+          extensionDays,
+          finalBf: Number(smoothedBf.toFixed(2)),
+          signedTargetError: Number((smoothedBf - startingCycleBodyFat).toFixed(2)),
+          absoluteTargetError: Number(Math.abs(smoothedBf - startingCycleBodyFat).toFixed(2)),
+          targetReached: smoothedBf <= (startingCycleBodyFat + (MINICUT_CONFIG?.BF_TOLERANCE ?? 0.3)),
+          exitReason: actualDaysSpent >= (MINICUT_CONFIG?.SAFETY_CEILING_DAYS ?? 70)
+            ? 'SAFETY_CEILING'
+            : (smoothedBf <= (startingCycleBodyFat + (MINICUT_CONFIG?.BF_TOLERANCE ?? 0.3)) ? 'TARGET_REACHED' : 'SCHEDULE_COMPLETE'),
+        };
+
+        // Adjust remaining days for bulk_2 so total simulation remains exactly totalDays
+        const daysRemaining = totalDays - day;
+        schedule[currentPhaseIndex].days = daysRemaining;
+      }
+
       // Phase coarse calorie target shift spread over 3 days
       let totalShift = 0;
       if (prevPhase === PHASE.BULK && newPhase === PHASE.MINICUT) {
-        const targetMinicut = initialCalorieTarget(estimatedTDEE_state, PHASE.MINICUT);
+        const latestTrendWt = prevTrendWeightForBf ?? profile.weightKg;
+        minicutPlanAtStart = planMinicutEnergyTarget({
+          currentWeightKg: latestTrendWt,
+          currentBfPercent: smoothedBf,
+          targetBfPercent: startingCycleBodyFat,
+          tdeeKcal: estimatedTDEE_state,
+          preferredDays: MINICUT_CONFIG?.PREFERRED_DAYS ?? 21,
+        });
+        const targetMinicut = Math.round(estimatedTDEE_state - minicutPlanAtStart.appliedDeficit);
         totalShift = targetMinicut - currentCalories;
       } else if (prevPhase === PHASE.MINICUT && newPhase === PHASE.BULK) {
         const targetBulk = initialCalorieTarget(estimatedTDEE_state, PHASE.BULK);
         totalShift = targetBulk - currentCalories;
       }
+
+      calorieSmoothQueue.length = 0;
       if (totalShift !== 0) {
         const slice = Math.round(totalShift / 3);
         calorieSmoothQueue.push(slice, slice, totalShift - slice * 2);
@@ -305,6 +376,10 @@ export function run180DaySimulation(seed = SEED, options = {}) {
     const currentPhaseItem = schedule[currentPhaseIndex];
     const currentPhase = currentPhaseItem.name;
     daysInCurrentPhase++;
+
+    if (currentPhase === PHASE.MINICUT) {
+      minicutDailyDeficits.push(Math.round(estimatedTDEE_state - currentCalories));
+    }
 
     const isTrainingDay = isTrainingDayOf(day, profile.trainingSessions);
 
@@ -775,7 +850,7 @@ export function run180DaySimulation(seed = SEED, options = {}) {
         - (snaps[0].groundTruth.trueOtherLeanKg ?? 0)
       ).toFixed(3)),
       controllerBehaviorNotice: snaps[0].phaseId === 'minicut'
-        ? 'Janela de estabilização pós-transição (14 dias com damping de taxa) e cooldown obrigatório de 14 dias entre ajustes impedem reações impulsivas à queda inicial de água/glicogênio. O controlador realizou 1 intervenção (+50 kcal na semana 12) enquanto 47,1% da perda era peso transitório.'
+        ? `Controlador adaptativo de minicut: déficit planejado com cap absoluto inegociável de 650 kcal/dia. Janela mínima de estabilização pós-transição (14 dias com damping de taxa). Minicut executado com meta prioritária de retornar ao BF de referência do ciclo (${startingCycleBodyFat}% ± 0,3%). Duração: ${minicutAudit ? minicutAudit.actualDays : snaps.length * 7} dias (${minicutAudit?.extensionRequired ? `extensão mínima de ${minicutAudit.extensionDays} dias além dos 21 previstos` : 'concluído na janela preferida de 21 dias'}).`
         : undefined,
     };
   };
@@ -919,6 +994,31 @@ export function run180DaySimulation(seed = SEED, options = {}) {
   const bfIntervalWidths = weeklySnapshots.map(s => s.bodyFatHigh - s.bodyFatLow);
   const bodyFatMeanIntervalWidth = Number((bfIntervalWidths.reduce((a, b) => a + b, 0) / bfIntervalWidths.length).toFixed(1));
 
+  if (!minicutAudit && minicutPlanAtStart) {
+    const actualAvgDeficit = minicutDailyDeficits.length
+      ? Math.round(minicutDailyDeficits.reduce((a, b) => a + b, 0) / minicutDailyDeficits.length)
+      : 0;
+    const preferredDays = MINICUT_CONFIG?.PREFERRED_DAYS ?? 21;
+    const extensionDays = Math.max(0, daysInCurrentPhase - preferredDays);
+    minicutAudit = {
+      startingBf: startingCycleBodyFat,
+      targetBf: startingCycleBodyFat,
+      tolerance: MINICUT_CONFIG?.BF_TOLERANCE ?? 0.3,
+      initialRequiredDeficit: minicutPlanAtStart.requiredDeficit,
+      maximumAllowedDeficit: MINICUT_CONFIG?.MAX_DEFICIT_KCAL ?? 650,
+      actualAverageDeficit: actualAvgDeficit,
+      preferredDays,
+      actualDays: daysInCurrentPhase,
+      extensionRequired: extensionDays > 0,
+      extensionDays,
+      finalBf: Number(smoothedBf.toFixed(2)),
+      signedTargetError: Number((smoothedBf - startingCycleBodyFat).toFixed(2)),
+      absoluteTargetError: Number(Math.abs(smoothedBf - startingCycleBodyFat).toFixed(2)),
+      targetReached: smoothedBf <= (startingCycleBodyFat + (MINICUT_CONFIG?.BF_TOLERANCE ?? 0.3)),
+      exitReason: 'SIMULATION_ENDED',
+    };
+  }
+
   const summary = {
     profile,
     scenario: 'Masscience v2.4 Causal Closed-Loop Simulation — 6-compartment physiological model',
@@ -1042,10 +1142,34 @@ export function run180DaySimulation(seed = SEED, options = {}) {
     },
     regressionAuditDashboard: {
       metrics: [
-        { metric: 'BF Bias', previousVersion: -0.688, currentVersion: bodyFatBias, target: '[-0.25, 0.25] p.p.', status: 'EXCELLENT' },
-        { metric: 'BF MAE', previousVersion: 0.688, currentVersion: bodyFatMAE, target: '< 0.35 p.p.', status: 'EXCELLENT' },
-        { metric: 'TDEE MAE', previousVersion: 77.2, currentVersion: tdeeMAE, target: '< 60 kcal', status: 'EXCELLENT' },
-        { metric: 'TDEE Bias', previousVersion: -74.5, currentVersion: tdeeBias, target: '[-35, 35] kcal', status: 'EXCELLENT' },
+        {
+          metric: 'BF Bias',
+          previousVersion: -0.688,
+          currentVersion: bodyFatBias,
+          target: '[-0.25, 0.25] p.p.',
+          status: Math.abs(bodyFatBias) <= 0.25 ? 'EXCELLENT' : (Math.abs(bodyFatBias) <= 0.45 ? 'ACCEPTABLE / REVIEW BIAS' : 'NEEDS_CALIBRATION'),
+        },
+        {
+          metric: 'BF MAE',
+          previousVersion: 0.688,
+          currentVersion: bodyFatMAE,
+          target: '< 0.35 p.p.',
+          status: bodyFatMAE <= 0.35 ? 'EXCELLENT' : (bodyFatMAE <= 0.50 ? 'ACCEPTABLE' : 'NEEDS_CALIBRATION'),
+        },
+        {
+          metric: 'TDEE MAE',
+          previousVersion: 77.2,
+          currentVersion: tdeeMAE,
+          target: '< 60 kcal',
+          status: tdeeMAE <= 60 ? 'EXCELLENT' : (tdeeMAE <= 80 ? 'ACCEPTABLE' : 'NEEDS_CALIBRATION'),
+        },
+        {
+          metric: 'TDEE Bias',
+          previousVersion: -74.5,
+          currentVersion: tdeeBias,
+          target: '[-35, 35] kcal',
+          status: Math.abs(tdeeBias) <= 35 ? 'EXCELLENT' : (Math.abs(tdeeBias) <= 50 ? 'ACCEPTABLE' : 'NEEDS_CALIBRATION'),
+        },
         {
           metric: 'TDEE Interval Coverage',
           previousVersion: '84.6%',
@@ -1060,12 +1184,52 @@ export function run180DaySimulation(seed = SEED, options = {}) {
             ? '100% no cenário baseline único com largura estreita (274,8 kcal). Alvo formal é 92–98%; requer monitoramento em Monte Carlo para evitar sobre-cobertura artificial.'
             : undefined,
         },
-        { metric: 'Fat Trajectory Correlation', previousVersion: 0.852, currentVersion: fatMassTrajectoryCorrelation, target: '> 0.90', status: 'EXCELLENT' },
-        { metric: 'Muscle Trajectory Correlation', previousVersion: 0.767, currentVersion: muscleMassTrajectoryCorrelation, target: '> 0.75', status: 'EXCELLENT' },
-        { metric: 'Energy Conservation Error', previousVersion: 39.7, currentVersion: energyConservationError, target: '< 50 kcal', status: 'EXCELLENT' },
+        {
+          metric: 'Fat Trajectory Correlation',
+          previousVersion: 0.852,
+          currentVersion: fatMassTrajectoryCorrelation,
+          target: '> 0.90',
+          status: fatMassTrajectoryCorrelation >= 0.90 ? 'EXCELLENT' : (fatMassTrajectoryCorrelation >= 0.85 ? 'ACCEPTABLE' : 'NEEDS_CALIBRATION'),
+        },
+        {
+          metric: 'Muscle Trajectory Correlation',
+          previousVersion: 0.767,
+          currentVersion: muscleMassTrajectoryCorrelation,
+          target: '> 0.75',
+          status: muscleMassTrajectoryCorrelation >= 0.75 ? 'EXCELLENT' : (muscleMassTrajectoryCorrelation >= 0.70 ? 'ACCEPTABLE' : 'NEEDS_CALIBRATION'),
+        },
+        {
+          metric: 'Energy Conservation Error',
+          previousVersion: 39.7,
+          currentVersion: energyConservationError,
+          target: '< 50 kcal',
+          status: energyConservationError <= 50 ? 'EXCELLENT' : 'NEEDS_CALIBRATION',
+        },
+        {
+          metric: 'Minicut Target Reached',
+          previousVersion: 'FALSE (ended at 9.4% BF vs 8.0% target)',
+          currentVersion: minicutAudit ? (minicutAudit.targetReached ? 'TRUE' : 'FALSE') : 'N/A',
+          target: 'TRUE (BF <= startingBf + 0.3%)',
+          status: minicutAudit?.targetReached ? 'EXCELLENT' : 'NEEDS_CALIBRATION',
+        },
+        {
+          metric: 'Minicut BF Target Error',
+          previousVersion: '+1.4 p.p.',
+          currentVersion: minicutAudit ? `${minicutAudit.signedTargetError >= 0 ? '+' : ''}${minicutAudit.signedTargetError} p.p.` : 'N/A',
+          target: '<= +0.3 p.p.',
+          status: minicutAudit && minicutAudit.absoluteTargetError <= 0.3 ? 'EXCELLENT' : 'NEEDS_CALIBRATION',
+        },
+        {
+          metric: 'Minicut Max Deficit Cap',
+          previousVersion: 'Uncapped / Fixed',
+          currentVersion: minicutAudit ? `${minicutAudit.actualAverageDeficit} kcal (cap: ${minicutAudit.maximumAllowedDeficit})` : 'N/A',
+          target: '<= 650 kcal',
+          status: minicutAudit && minicutAudit.actualAverageDeficit <= 650 ? 'EXCELLENT' : 'NEEDS_CALIBRATION',
+        },
       ],
       notice: 'Painel automatizado de regressão para monitorar trade-offs inter-versões e prevenir retrocessos fisiológicos.',
     },
+    minicutAudit,
   };
 
   return { summary, weeklySnapshots, dailyGroundTruth };
@@ -1110,9 +1274,9 @@ export function runMultiSeedMonteCarloAudit(numSeeds = 500) {
       activityLevel: 'moderately_active',
     };
 
-    // Randomized phase durations
+    // Phase durations with preferred 21-day minicut
     const bulk1d = Math.round(70 * (0.90 + prng() * 0.20));
-    const minicutd = Math.round(28 * (0.85 + prng() * 0.30));
+    const minicutd = MINICUT_CONFIG?.PREFERRED_DAYS ?? 21;
     const bulk2d = 180 - bulk1d - minicutd;
 
     const sim = run180DaySimulation(seedBase + i, {
@@ -1179,6 +1343,10 @@ export function runMultiSeedMonteCarloAudit(numSeeds = 500) {
     bfChangePct: results.map(r => r.groundTruth6ComponentBodyComposition.trueBodyFatChange),
     energyConservationError: results.map(r => r.validation.energyConservationErrorKcal),
     massBalanceError: results.map(r => r.validation.compartmentMassBalanceErrorKg),
+    minicutTargetReachedPct: results.map(r => r.minicutAudit?.targetReached ? 100 : 0),
+    minicutDays: results.map(r => r.minicutAudit?.actualDays ?? 0),
+    minicutDeficitKcal: results.map(r => r.minicutAudit?.actualAverageDeficit ?? 0),
+    minicutBfError: results.map(r => r.minicutAudit?.absoluteTargetError ?? 0),
   };
 
   const dist = {};
@@ -1218,7 +1386,8 @@ function generateReport() {
   console.log('\nMulti-Seed Population Audit (500 seeds — distributions):');
   const d = mcAudit.distributions;
   const keys = ['bfMAE', 'bfCoveragePct', 'tdeeMAE', 'tdeeBias', 'weightCoveragePct',
-    'oscillations', 'fatChangeKg', 'muscleChangeKg', 'energyConservationError'];
+    'oscillations', 'fatChangeKg', 'muscleChangeKg', 'energyConservationError',
+    'minicutTargetReachedPct', 'minicutDays', 'minicutDeficitKcal', 'minicutBfError'];
   const small = {};
   for (const k of keys) {
     small[k] = {

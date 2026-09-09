@@ -5,10 +5,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { processWeightData, detectOutlier, estimateMissingWeights } from '../trend.js';
-import { advanceCyclePhase } from '../cycle.js';
+import { advanceCyclePhase, addWeightMeasurement } from '../cycle.js';
 import { daysBetween, addDays } from '../utils.js';
-import { recommendedGainRange, estimateBodyFat, partitionWeightChange } from '../calculations.js';
-import { applyBfInertia } from '../composition.js';
+import { recommendedGainRange, estimateBodyFat, partitionWeightChange, compositionRange, jacksonPollock3Skinfold } from '../calculations.js';
+import { applyBfInertia, fuseBfSources } from '../composition.js';
 import { calculateCalorieAdjustment, simulateController } from '../control.js';
 import { estimateAdaptiveTDEE } from '../adaptive.js';
 import { runMonteCarloProjection } from '../projection.js';
@@ -117,6 +117,26 @@ test('BF estimate drifts for sustained gain without direct measurement', () => {
   const trend = { totalGain: 4.2, weeksSinceStart: 6, latest: { trend: 74.2 } };
   const result = estimateBodyFat(p, trend, [], { smoothedBf: 8 });
   return result.estimate > 8 && result.estimate < 16 && result.confidence < 70;
+});
+
+test('Jackson-Pollock 3-site formula computes physiologically sound BF', () => {
+  const maleBF = jacksonPollock3Skinfold('male', 28, { chest: 10, abdomen: 15, thigh: 12 });
+  const femaleBF = jacksonPollock3Skinfold('female', 28, { triceps: 14, suprailiac: 16, thigh: 18 });
+  return maleBF > 8 && maleBF < 20 && femaleBF > 15 && femaleBF < 30;
+});
+
+test('Composition range provides both exact estimate and interval bounds', () => {
+  const comp = compositionRange(75, { estimate: 14.5, low: 12.5, high: 16.5, uncertainty: 2.0 });
+  return comp.fatMass.estimate === comp.fatMass.mid
+    && comp.fatMass.low < comp.fatMass.estimate
+    && comp.leanMass.estimate === comp.leanMass.mid
+    && comp.leanMass.high > comp.leanMass.estimate;
+});
+
+test('Navy measurement is de-emphasized and does not grant hasDirectMeasurement', () => {
+  const fusionNavy = fuseBfSources({ bodyFatPercent: 12, sex: 'male', heightCm: 178 }, [{ waist: 82, neck: 38 }]);
+  const fusionDEXA = fuseBfSources({ bodyFatPercent: 12, sex: 'male', heightCm: 178 }, [{ bodyFatPercent: 11.5, method: 'direct' }]);
+  return !fusionNavy.hasDirectMeasurement && fusionDEXA.hasDirectMeasurement;
 });
 
 test('Monte Carlo projection widens intervals', () => {
@@ -400,6 +420,33 @@ test('Invariante 7 — Isolamento de Ground Truth: algoritmo opera sem acessar g
   const trend = processWeightData(ms, start);
   const bf = estimateBodyFat(profile, trend, [], {});
   return !('truePhysiologicalWeight' in trend) && !('trueFatMass' in bf);
+});
+
+test('Refeição livre / Pico de sódio: preserva peso medido, amortece tendência e protege taxa de ganho', () => {
+  const startDate = '2026-03-01';
+  const initialState = {
+    currentCycle: { startDate, phaseStartDate: startDate, initialWeight: 70 },
+    weightMeasurements: [
+      { date: '2026-03-01', weight: 70.0, isEstimated: false },
+      { date: '2026-03-02', weight: 70.1, isEstimated: false },
+      { date: '2026-03-03', weight: 70.0, isEstimated: false },
+      { date: '2026-03-04', weight: 70.2, isEstimated: false },
+    ],
+  };
+
+  const updatedState = addWeightMeasurement(initialState, 71.8, { date: '2026-03-05', isSodiumSpike: true });
+  const logged = updatedState.weightMeasurements.find(m => m.date === '2026-03-05');
+
+  // 1. Raw weight preserved
+  if (logged.weight !== 71.8) return false;
+  // 2. Outlier and sodium spike flags assigned
+  if (!logged.isSodiumSpike || !logged.isOutlier || logged.outlierReason !== 'sodium_spike') return false;
+  // 3. Trend weight is damped (~70.3 kg, not 71.8 kg)
+  if (logged.trendWeight > 70.5) return false;
+
+  // 4. Trend processing downweights the spike
+  const trend = processWeightData(updatedState.weightMeasurements, startDate);
+  return trend.latest && Math.abs(trend.latest.trend - 70.2) < 0.4;
 });
 
 const passed = results.filter(r => r.pass).length;

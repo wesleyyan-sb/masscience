@@ -2,7 +2,7 @@
  * Masscience V2 — Metabolic & body composition calculations
  */
 import {
-  ACTIVITY_MULTIPLIERS, MACROS, WATER, BODY_COMP, GAIN_RATE, CYCLE, CALORIES, PHASE,
+  ACTIVITY_MULTIPLIERS, MACROS, WATER, BODY_COMP, GAIN_RATE, CYCLE, CALORIES, PHASE, MINICUT_CONFIG,
 } from './constants.js';
 import { clamp, round } from './utils.js';
 import { estimateBodyComposition } from './composition.js';
@@ -86,15 +86,20 @@ export function compositionFromBF(weightKg, bfPercent) {
 }
 
 export function compositionRange(weightKg, bfEstimate) {
-  const low = compositionFromBF(weightKg, bfEstimate.high ?? (bfEstimate.estimate + (bfEstimate.uncertainty || 2)));
-  const mid = compositionFromBF(weightKg, bfEstimate.estimate);
-  const high = compositionFromBF(weightKg, bfEstimate.low ?? (bfEstimate.estimate - (bfEstimate.uncertainty || 2)));
+  const estBf = typeof bfEstimate === 'object' ? (bfEstimate.estimate ?? 15) : bfEstimate;
+  const uncert = typeof bfEstimate === 'object' ? (bfEstimate.uncertainty || 2) : 2;
+  const bfMin = typeof bfEstimate === 'object' ? (bfEstimate.low ?? (estBf - uncert)) : (estBf - uncert);
+  const bfMax = typeof bfEstimate === 'object' ? (bfEstimate.high ?? (estBf + uncert)) : (estBf + uncert);
+
+  const atMinBf = compositionFromBF(weightKg, bfMin);
+  const atMidBf = compositionFromBF(weightKg, estBf);
+  const atMaxBf = compositionFromBF(weightKg, bfMax);
 
   // 6-compartment latent estimates
-  const estTotalLean = mid.leanMass;
+  const estTotalLean = atMidBf.leanMass;
   const estMuscleMid = round(estTotalLean * 0.46, 1);
-  const estMuscleLow = round(low.leanMass * 0.45, 1);
-  const estMuscleHigh = round(high.leanMass * 0.47, 1);
+  const estMuscleLow = round(atMaxBf.leanMass * 0.45, 1);
+  const estMuscleHigh = round(atMinBf.leanMass * 0.47, 1);
 
   const estStructuralMid = round(estTotalLean * 0.24, 1);
   const estGlycogenMid = 0.5;
@@ -102,13 +107,28 @@ export function compositionRange(weightKg, bfEstimate) {
   const estWaterMid = round(estTotalLean - estMuscleMid - estStructuralMid - estGlycogenMid - estDigestiveMid, 1);
 
   return {
-    fatMass: { low: round(low.fatMass, 1), mid: round(mid.fatMass, 1), high: round(high.fatMass, 1) },
-    leanMass: { low: round(low.leanMass, 1), mid: round(mid.leanMass, 1), high: round(high.leanMass, 1) },
-    contractileMuscle: { low: estMuscleLow, mid: estMuscleMid, high: estMuscleHigh },
-    structuralLean: { mid: estStructuralMid },
-    glycogen: { mid: estGlycogenMid },
-    hydrationWater: { mid: Math.max(10, estWaterMid) },
-    digestive: { mid: estDigestiveMid },
+    fatMass: {
+      low: round(Math.min(atMinBf.fatMass, atMaxBf.fatMass), 1),
+      mid: round(atMidBf.fatMass, 1),
+      high: round(Math.max(atMinBf.fatMass, atMaxBf.fatMass), 1),
+      estimate: round(atMidBf.fatMass, 1),
+    },
+    leanMass: {
+      low: round(Math.min(atMinBf.leanMass, atMaxBf.leanMass), 1),
+      mid: round(atMidBf.leanMass, 1),
+      high: round(Math.max(atMinBf.leanMass, atMaxBf.leanMass), 1),
+      estimate: round(atMidBf.leanMass, 1),
+    },
+    contractileMuscle: {
+      low: Math.min(estMuscleLow, estMuscleHigh),
+      mid: estMuscleMid,
+      high: Math.max(estMuscleLow, estMuscleHigh),
+      estimate: estMuscleMid,
+    },
+    structuralLean: { mid: estStructuralMid, estimate: estStructuralMid },
+    glycogen: { mid: estGlycogenMid, estimate: estGlycogenMid },
+    hydrationWater: { mid: Math.max(10, estWaterMid), estimate: Math.max(10, estWaterMid) },
+    digestive: { mid: estDigestiveMid, estimate: estDigestiveMid },
     note: 'Contractile muscle ≠ total lean mass. Hydration and glycogen vary with nutrition and training.',
   };
 }
@@ -116,6 +136,28 @@ export function compositionRange(weightKg, bfEstimate) {
 export function calculateFFMI(leanMassKg, heightCm) {
   const heightM = heightCm / 100;
   return leanMassKg / (heightM * heightM);
+}
+
+/** Jackson-Pollock 3-site caliper formula (laboratory-validated skinfolds) */
+export function jacksonPollock3Skinfold(sex, age, folds = {}) {
+  const userAge = Number(age) || 28;
+  if (sex === 'female') {
+    const { triceps, suprailiac, thigh } = folds;
+    if (!triceps || !suprailiac || !thigh || triceps <= 0 || suprailiac <= 0 || thigh <= 0) return null;
+    const sum = Number(triceps) + Number(suprailiac) + Number(thigh);
+    const bd = 1.0994921 - (0.0009929 * sum) + (0.0000023 * sum * sum) - (0.0001392 * userAge);
+    if (bd <= 0) return null;
+    const bf = (495 / bd) - 450;
+    return clamp(round(bf, 1), BODY_COMP.MIN_BF, BODY_COMP.MAX_BF);
+  }
+  // Male: chest, abdomen, thigh
+  const { chest, abdomen, thigh } = folds;
+  if (!chest || !abdomen || !thigh || chest <= 0 || abdomen <= 0 || thigh <= 0) return null;
+  const sum = Number(chest) + Number(abdomen) + Number(thigh);
+  const bd = 1.10938 - (0.0008267 * sum) + (0.0000016 * sum * sum) - (0.0002574 * userAge);
+  if (bd <= 0) return null;
+  const bf = (495 / bd) - 450;
+  return clamp(round(bf, 1), BODY_COMP.MIN_BF, BODY_COMP.MAX_BF);
 }
 
 export function navyBodyFat(sex, waistCm, neckCm, heightCm, hipCm = null) {
@@ -251,6 +293,87 @@ export function maxBulkBodyFat(initialBf, bulkWeeks, gainRange, partitionMid) {
 export function initialCalorieTarget(tdee, phase) {
   if (phase === PHASE.MINICUT) return tdee - CALORIES.INITIAL_MINICUT_DEFICIT;
   return tdee + CALORIES.INITIAL_BULK_SURPLUS;
+}
+
+/**
+ * Calculates the minimum required calorie deficit to return to target BF
+ * within the preferred 21-day horizon, capped at 650 kcal/day.
+ */
+export function planMinicutEnergyTarget(currentWeightKg, currentBfPercent, targetBfPercent, tdeeKcal, daysRemaining = 21) {
+  let weight = currentWeightKg;
+  let curBfRaw = currentBfPercent;
+  let tgtBfRaw = targetBfPercent;
+  let tdee = tdeeKcal;
+  let days = daysRemaining;
+
+  if (typeof currentWeightKg === 'object' && currentWeightKg !== null) {
+    const opts = currentWeightKg;
+    weight = opts.currentWeightKg ?? opts.trendWeightKg ?? opts.weightKg ?? 70;
+    curBfRaw = opts.currentBfPercent ?? opts.currentEstimatedBf ?? opts.bodyFatPercent ?? 15;
+    tgtBfRaw = opts.targetBfPercent ?? opts.targetBf ?? 10;
+    tdee = opts.tdeeKcal ?? opts.estimatedTdee ?? opts.tdee ?? 2500;
+    days = opts.daysRemaining ?? opts.preferredDays ?? 21;
+  }
+
+  const curBf = Math.max(3, curBfRaw);
+  const tgtBf = Math.max(3, tgtBfRaw);
+  const daysHorizon = Math.max(7, days);
+
+  // If already at or below target + tolerance, use conservative minimum deficit
+  if (curBf <= tgtBf + (MINICUT_CONFIG?.BF_TOLERANCE ?? 0.3)) {
+    return {
+      fatToLoseKg: 0,
+      totalEnergyDeficitKcal: 0,
+      requiredDeficit: MINICUT_CONFIG?.MIN_DEFICIT_KCAL ?? 300,
+      appliedDeficit: MINICUT_CONFIG?.MIN_DEFICIT_KCAL ?? 300,
+      targetCalories: Math.round(tdee - (MINICUT_CONFIG?.MIN_DEFICIT_KCAL ?? 300)),
+      projectedDaysToTarget: MINICUT_CONFIG?.MIN_STABILIZATION_DAYS ?? 14,
+      extensionLikely: false,
+      extensionDays: 0,
+    };
+  }
+
+  // Calculate required fat loss to return to target BF:
+  // Current fat mass
+  const currentFatKg = weight * (curBf / 100);
+  const currentLeanKg = weight - currentFatKg;
+  const targetFraction = tgtBf / 100;
+  // Account for slight water/glycogen reduction in lean mass during cut
+  const projectedLeanKg = currentLeanKg * 0.985;
+  const projectedEndFatKg = (projectedLeanKg / (1 - targetFraction)) * targetFraction;
+  const fatToLoseKg = Math.max(0.15, currentFatKg - projectedEndFatKg);
+
+  // Stored chemical energy ~9400 kcal/kg lipid, fat energy share ~88%
+  const totalEnergyDeficitKcal = (fatToLoseKg * 9400) / 0.88;
+
+  // Deficit required to hit target in 'days' (default 21 days)
+  const rawRequiredDeficit = Math.round(totalEnergyDeficitKcal / daysHorizon);
+  const requiredDeficit = clamp(rawRequiredDeficit, MINICUT_CONFIG?.MIN_DEFICIT_KCAL ?? 300, 1500);
+
+  // Absolute hard cap: NEVER exceed 650 kcal/day
+  const maxDeficit = MINICUT_CONFIG?.MAX_DEFICIT_KCAL ?? 650;
+  const appliedDeficit = clamp(requiredDeficit, MINICUT_CONFIG?.MIN_DEFICIT_KCAL ?? 300, maxDeficit);
+
+  // Projected days at the applied deficit
+  const projectedDaysToTarget = Math.max(
+    MINICUT_CONFIG?.MIN_STABILIZATION_DAYS ?? 14,
+    Math.round(totalEnergyDeficitKcal / appliedDeficit)
+  );
+
+  const preferredDays = MINICUT_CONFIG?.PREFERRED_DAYS ?? 21;
+  const extensionLikely = projectedDaysToTarget > preferredDays;
+  const extensionDays = Math.max(0, projectedDaysToTarget - preferredDays);
+
+  return {
+    fatToLoseKg: round(fatToLoseKg, 2),
+    totalEnergyDeficitKcal: Math.round(totalEnergyDeficitKcal),
+    requiredDeficit,
+    appliedDeficit,
+    targetCalories: Math.round(tdee - appliedDeficit),
+    projectedDaysToTarget,
+    extensionLikely,
+    extensionDays,
+  };
 }
 
 function rangeMid(r) {

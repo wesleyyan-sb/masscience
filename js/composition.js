@@ -4,35 +4,73 @@
 import { BODY_COMP, PHASE } from './constants.js';
 import { clamp, round, daysBetween, today } from './utils.js';
 import { calculateBFConfidence } from './confidence.js';
-import { navyBodyFat, compositionFromBF, compositionRange } from './calculations.js';
+import { navyBodyFat, jacksonPollock3Skinfold, compositionFromBF, compositionRange } from './calculations.js';
 
 export function fuseBfSources(profile, bodyMeasurements = []) {
   const sources = [{
     type: 'user',
     value: profile.bodyFatPercent,
     sigma: BODY_COMP.SIGMA_USER_BF,
-    weight: 1 / BODY_COMP.SIGMA_USER_BF ** 2,
+    weight: 1 / (BODY_COMP.SIGMA_USER_BF ** 2),
   }];
 
   const latest = bodyMeasurements.length ? bodyMeasurements[bodyMeasurements.length - 1] : null;
-  if (latest?.waist && latest?.neck) {
-    const navy = navyBodyFat(profile.sex, latest.waist, latest.neck, profile.heightCm, latest.hip);
-    if (navy != null) {
+  if (latest) {
+    // 1. Direct BF measurement (DEXA, caliper, BIA or manual calibration)
+    if (latest.bodyFatPercent != null && !isNaN(latest.bodyFatPercent)) {
+      const method = latest.method || 'direct';
+      let sigma = BODY_COMP.SIGMA_DEXA_BF || 1.2;
+      if (method === 'caliper') sigma = BODY_COMP.SIGMA_CALIPER_BF || 1.8;
+      else if (method === 'bia') sigma = BODY_COMP.SIGMA_BIA_BF || 3.5;
+      else if (method === 'user' || method === 'manual') sigma = BODY_COMP.SIGMA_USER_BF;
+
       sources.push({
-        type: 'navy',
-        value: navy,
-        sigma: BODY_COMP.SIGMA_NAVY_BF,
-        weight: 1 / BODY_COMP.SIGMA_NAVY_BF ** 2,
+        type: method,
+        value: clamp(Number(latest.bodyFatPercent), BODY_COMP.MIN_BF, BODY_COMP.MAX_BF),
+        sigma,
+        weight: 1 / (sigma ** 2),
       });
+    }
+
+    // 2. Caliper skinfolds (Jackson-Pollock 3-site)
+    const folds = latest.folds || {
+      chest: latest.chestFold ?? latest.chest,
+      abdomen: latest.abdomenFold ?? latest.abdomen,
+      thigh: latest.thighFold ?? latest.thigh,
+      triceps: latest.tricepsFold ?? latest.triceps,
+      suprailiac: latest.suprailiacFold ?? latest.suprailiac,
+    };
+    const jpBf = jacksonPollock3Skinfold(profile.sex, profile.age, folds);
+    if (jpBf != null) {
+      sources.push({
+        type: 'caliper',
+        value: jpBf,
+        sigma: BODY_COMP.SIGMA_CALIPER_BF || 1.8,
+        weight: 1 / ((BODY_COMP.SIGMA_CALIPER_BF || 1.8) ** 2),
+      });
+    }
+
+    // 3. US Navy method (strictly optional fallback heuristic, non-dominant)
+    if (latest.waist && latest.neck) {
+      const navy = navyBodyFat(profile.sex, latest.waist, latest.neck, profile.heightCm, latest.hip);
+      if (navy != null) {
+        sources.push({
+          type: 'navy',
+          value: navy,
+          sigma: BODY_COMP.SIGMA_NAVY_BF || 5.5,
+          weight: 1 / ((BODY_COMP.SIGMA_NAVY_BF || 5.5) ** 2),
+        });
+      }
     }
   }
 
   const sumW = sources.reduce((a, s) => a + s.weight, 0);
+  const hasDirect = sources.some(s => s.type === 'dexa' || s.type === 'caliper' || s.type === 'direct');
   return {
     fused: clamp(sources.reduce((a, s) => a + s.value * s.weight, 0) / sumW, BODY_COMP.MIN_BF, BODY_COMP.MAX_BF),
     sigma: Math.sqrt(1 / sumW),
     sources,
-    hasDirectMeasurement: sources.some(s => s.type === 'navy'),
+    hasDirectMeasurement: hasDirect,
   };
 }
 
@@ -104,22 +142,32 @@ function phaseTransitionDiscount(sustainedDaysObj) {
   return 1.0;
 }
 
-function adaptiveFatFrac(isGain, sustainedDaysObj, phase, daysInPhase) {
+function adaptiveFatFrac(isGain, sustainedDaysObj, phase, daysInPhase, fatMass = null, trainingYears = 3) {
   const earlyCut = phase === PHASE.MINICUT && (daysInPhase ?? 999) <= 10;
   const earlyBulk = phase === PHASE.BULK && (daysInPhase ?? 999) <= 8;
   const t = clamp(sustainedDaysObj.days / 16, 0, 1);
+
+  // Forbes adiposity modulation adapted for resistance-trained lifters:
+  // Leaner athletes have higher muscle protein synthesis efficiency (partitioning slightly more to lean),
+  // whereas higher adiposity individuals partition slightly more to fat.
+  let adiposityMod = 0;
+  if (fatMass != null && fatMass > 0) {
+    adiposityMod = clamp((fatMass - 7.5) / 40, -0.04, 0.08);
+  }
+
+  // Experience: advanced trainees partition slightly more to fat in surplus
+  const expMod = trainingYears >= 5 ? 0.03 : (trainingYears < 2 ? -0.04 : 0);
+
   if (isGain) {
-    if (earlyBulk) return 0.48 + 0.15 * t;
-    return 0.68 + 0.04 * t;
+    if (earlyBulk) return clamp(0.48 + 0.15 * t + adiposityMod + expMod, 0.38, 0.85);
+    return clamp(0.68 + 0.04 * t + adiposityMod + expMod, 0.55, 0.85);
   }
-  // In minicut, fluid/glycogen/gut depletion accounts for ~50-60% of total scale loss.
-  // Attributing >50% of raw scale loss to fat creates massive over-estimation of fat loss
-  // which causes systematic downward bias in body fat percentage.
+  // In minicut
   if (phase === PHASE.MINICUT) {
-    if (earlyCut) return 0.28 + 0.10 * t;
-    return 0.42 + 0.06 * t;
+    if (earlyCut) return clamp(0.28 + 0.10 * t + adiposityMod * 0.5, 0.20, 0.55);
+    return clamp(0.42 + 0.06 * t + adiposityMod * 0.5, 0.30, 0.75);
   }
-  return 0.65 + 0.10 * t;
+  return clamp(0.65 + 0.10 * t + adiposityMod, 0.50, 0.85);
 }
 
 function expectedTransientShare(phase, daysInPhase, weightDeltaKg) {
@@ -166,7 +214,7 @@ export function estimateBodyComposition(profile, trendData, bodyMeasurements = [
   const baselineWeight = trendData?.series?.[0]?.trend ?? profile.weightKg;
   const currentTrendWeight = trendData?.latest?.trend ?? profile.weightKg;
   const totalGain = currentTrendWeight - baselineWeight;
-  const hasDirectMeasurement = fusion.hasDirectMeasurement || bodyMeasurements.some(m => m?.waist && m?.neck);
+  const hasDirectMeasurement = fusion.hasDirectMeasurement;
 
   const sustainedDaysObj = estimateDirectionSustainedDays(trendData, algorithmState);
   const directionHistory = updateDirectionHistory(algorithmState, totalGain, weeks, baselineWeight);
@@ -188,7 +236,7 @@ export function estimateBodyComposition(profile, trendData, bodyMeasurements = [
   } else if (Math.abs(totalGain) >= 0.2 && currentTrendWeight > 0) {
     const transientShare = expectedTransientShare(phase, daysInPhase, stepWeightDelta);
     const tissueDelta = stepWeightDelta * (1 - transientShare);
-    const fatFrac = adaptiveFatFrac(tissueDelta > 0, sustainedDaysObj, phase, daysInPhase);
+    const fatFrac = adaptiveFatFrac(tissueDelta > 0, sustainedDaysObj, phase, daysInPhase, estimatedFatMass, profile.trainingYears);
     let weightImpliedFatDelta = tissueDelta * fatFrac;
 
     let energyImpliedFatDelta = 0;

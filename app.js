@@ -195,6 +195,40 @@ class MasscienceApp {
       if (e.target.id === 'modal-overlay') this.closeModal();
     });
 
+    document.getElementById('app').addEventListener('change', (e) => {
+      const radio = e.target.closest('input[type="radio"]');
+      if (radio) {
+        const name = radio.name;
+        const form = radio.form || document.getElementById('onboarding-form');
+        if (form) {
+          form.querySelectorAll(`input[name="${name}"]`).forEach(inp => {
+            const card = inp.closest('.radio-card, .session-chip');
+            if (card) card.classList.toggle('selected', inp.checked);
+          });
+          if (this.onboardingData && typeof this.onboardingData === 'object') {
+            this.onboardingData[name] = radio.value;
+          }
+        }
+      }
+    });
+
+    document.getElementById('app').addEventListener('input', (e) => {
+      if (e.target.id === 'custom-sessions-input') {
+        const val = e.target.value.trim();
+        if (val) {
+          this.onboardingData.trainingSessions = val;
+          const form = document.getElementById('onboarding-form');
+          if (form) {
+            form.querySelectorAll('input[name="trainingSessions"]').forEach(inp => {
+              inp.checked = false;
+              const card = inp.closest('.session-chip');
+              if (card) card.classList.remove('selected');
+            });
+          }
+        }
+      }
+    });
+
     document.getElementById('app').addEventListener('submit', (e) => {
       e.preventDefault();
       const form = e.target;
@@ -309,23 +343,42 @@ class MasscienceApp {
           <input type="number" name="bodyFat" value="${d.bodyFat || ''}" min="3" max="50" step="0.1" required>
           <span class="hint">Your best estimate. This is not measured precisely.</span></div>`;
     } else if (step === 2) {
+      const currentSessions = d.trainingSessions ? parseInt(d.trainingSessions) : 4;
       content = `
         <div class="form-group"><label>Training experience (years)</label>
-          <input type="number" name="trainingYears" value="${d.trainingYears || ''}" min="0" max="40" step="0.5" required></div>
-        <div class="form-group"><label>Resistance sessions per week</label>
-          <input type="number" name="trainingSessions" value="${d.trainingSessions || ''}" min="0" max="14" required></div>`;
+          <input type="number" name="trainingYears" value="${d.trainingYears || ''}" min="0" max="40" step="0.5" placeholder="e.g. 3" required></div>
+        <div class="form-group">
+          <label>Resistance training sessions per week</label>
+          <div class="sessions-selector-grid">
+            ${[2, 3, 4, 5, 6].map(num => `
+              <label class="session-chip ${currentSessions === num ? 'selected' : ''}">
+                <input type="radio" name="trainingSessions" value="${num}" ${currentSessions === num ? 'checked' : ''}>
+                <strong>${num}x</strong>
+                <span>/ week</span>
+              </label>
+            `).join('')}
+          </div>
+          <div class="custom-sessions-wrapper" style="margin-top: 0.6rem;">
+            <span class="hint">Or enter custom sessions:</span>
+            <input type="number" id="custom-sessions-input" min="1" max="14" placeholder="Other (e.g. 7)" value="${![2, 3, 4, 5, 6].includes(currentSessions) && d.trainingSessions ? d.trainingSessions : ''}" style="width: 120px; display: inline-block; margin-left: 0.5rem; padding: 0.4rem 0.6rem; font-size: 0.85rem;">
+          </div>
+        </div>`;
     } else if (step === 3) {
       const levels = [
-        ['sedentary', 'Sedentary — desk job, little exercise'],
-        ['lightly_active', 'Lightly active — light exercise 1–3 days/week'],
-        ['moderately_active', 'Moderately active — moderate exercise 3–5 days/week'],
-        ['very_active', 'Very active — hard exercise 6–7 days/week'],
-        ['extremely_active', 'Extremely active — very hard exercise, physical job'],
+        ['sedentary', 'Sedentary', 'Desk job, little to no exercise outside training'],
+        ['lightly_active', 'Lightly Active', 'Light daily activity or 1–3 days of light exercise/walking'],
+        ['moderately_active', 'Moderately Active', 'Regular daily movement or 3–5 days active per week'],
+        ['very_active', 'Very Active', 'Physical job or hard exercise 6–7 days per week'],
+        ['extremely_active', 'Extremely Active', 'Heavy physical labor + heavy daily training'],
       ];
-      content = levels.map(([val, label]) => `
+      content = levels.map(([val, title, desc]) => `
         <label class="radio-card ${d.activityLevel === val ? 'selected' : ''}">
           <input type="radio" name="activityLevel" value="${val}" ${d.activityLevel === val ? 'checked' : ''}>
-          <span>${label}</span>
+          <div class="radio-indicator"></div>
+          <div class="radio-content">
+            <strong class="radio-title">${title}</strong>
+            <span class="radio-desc">${desc}</span>
+          </div>
         </label>`).join('');
     } else if (step === 4) {
       content = `<p class="info-text">Masscience uses a 10-week lean bulk followed by a 3-week minicut. The adaptive engine adjusts calories based on your weight trend — not food logging.</p>
@@ -371,6 +424,11 @@ class MasscienceApp {
     const form = document.getElementById('onboarding-form');
     const fd = new FormData(form);
     for (const [k, v] of fd.entries()) this.onboardingData[k] = v;
+
+    const customSessions = document.getElementById('custom-sessions-input');
+    if (customSessions && customSessions.value.trim()) {
+      this.onboardingData.trainingSessions = customSessions.value.trim();
+    }
 
     if (this.onboardingStep === 0 && (!this.onboardingData.age || !this.onboardingData.sex)) {
       alert('Please enter your age and sex.'); return;
@@ -452,7 +510,8 @@ class MasscienceApp {
       return;
     }
 
-    this.state = addWeightMeasurement(this.state, weightKg);
+    const isSodiumSpike = form.isSodiumSpike ? form.isSodiumSpike.checked : false;
+    this.state = addWeightMeasurement(this.state, weightKg, { isSodiumSpike });
     saveState(this.state);
     this.recompute();
     this.render();
@@ -462,7 +521,17 @@ class MasscienceApp {
     const fd = new FormData(form);
     const entry = { date: today(), id: uuid() };
     for (const [k, v] of fd.entries()) {
-      if (v && k !== 'photo') entry[k] = parseFloat(v);
+      if (v && k !== 'photo' && k !== 'method') entry[k] = parseFloat(v);
+      else if (v && k === 'method') entry[k] = v;
+    }
+    if (entry.chestFold || entry.abdomenFold || entry.thighFold || entry.triceps || entry.suprailiac) {
+      entry.folds = {
+        chest: entry.chestFold,
+        abdomen: entry.abdomenFold,
+        thigh: entry.thighFold,
+        triceps: entry.triceps,
+        suprailiac: entry.suprailiac,
+      };
     }
     const photoInput = form.querySelector('#body-photo-input');
     if (photoInput?.files?.[0]) {
@@ -510,20 +579,43 @@ class MasscienceApp {
   showBfUpdateModal() {
     document.getElementById('modal-overlay').classList.add('active');
     document.getElementById('modal-content').innerHTML = `
-      <h3>Update Body Fat Estimate</h3>
-      <p class="hint">Enter a value from a DEXA scan, calipers, or other reliable method.</p>
-      <div class="form-group"><label>Body fat (%)</label>
-        <input type="number" id="bf-input" value="${this.state.profile.bodyFatPercent}" min="3" max="50" step="0.1"></div>
+      <h3>Atualizar Estimativa de Gordura (%BF)</h3>
+      <p class="hint">Insira um valor aferido por DEXA, adipômetro ou exame clínico para calibrar a precisão.</p>
+      <div class="form-grid">
+        <div class="form-group"><label>Body fat (%)</label>
+          <input type="number" id="bf-input" value="${this.state.profile.bodyFatPercent}" min="3" max="50" step="0.1"></div>
+        <div class="form-group"><label>Método de Medição</label>
+          <select id="bf-method-input">
+            <option value="direct">DEXA / Exame Clínico (Mais preciso)</option>
+            <option value="caliper">Adipômetro / Dobras</option>
+            <option value="bia">Balança de Bioimpedância</option>
+            <option value="manual">Manual / Estimativa Visual</option>
+          </select>
+        </div>
+      </div>
       <div class="modal-actions">
-        <button class="btn btn-ghost" data-action="close-modal">Cancel</button>
-        <button class="btn btn-primary" data-action="save-bf">Save</button>
+        <button class="btn btn-ghost" data-action="close-modal">Cancelar</button>
+        <button class="btn btn-primary" data-action="save-bf">Salvar e Calibrar</button>
       </div>`;
   }
 
   saveBfUpdate() {
     const val = parseFloat(document.getElementById('bf-input').value);
+    const method = document.getElementById('bf-method-input')?.value || 'direct';
     if (val >= 3 && val <= 50) {
       this.state.profile.bodyFatPercent = val;
+      if (this.state.algorithmState) {
+        this.state.algorithmState.smoothedBf = val;
+        const currentWeight = this.computed?.trendData?.latest?.trend || this.state.profile.weightKg;
+        this.state.algorithmState.estimatedFatMassKg = Number(((val / 100) * currentWeight).toFixed(4));
+        this.state.algorithmState.bfTargetHistory = [val];
+      }
+      this.state.bodyMeasurements.push({
+        date: today(),
+        id: uuid(),
+        bodyFatPercent: val,
+        method,
+      });
       saveState(this.state);
       this.recompute();
     }
@@ -662,8 +754,8 @@ class MasscienceApp {
       <div class="card-grid">
         <div class="card card-stat">
           <span class="stat-label">Estimated BF</span>
-          <span class="stat-value">~${c.bfEstimate?.low}–${c.bfEstimate?.high}%</span>
-          <span class="stat-hint">Estimated — not measured</span>
+          <span class="stat-value">${c.bfEstimate?.estimate != null ? `${c.bfEstimate.estimate}%` : '—'}</span>
+          <span class="stat-hint">Faixa provável: ${c.bfEstimate?.low}–${c.bfEstimate?.high}%</span>
         </div>
         <div class="card card-stat">
           <span class="stat-label">Target maximum</span>
@@ -689,12 +781,29 @@ class MasscienceApp {
             <input type="number" name="weight" step="0.1" placeholder="Weight (${units === 'imperial' ? 'lb' : 'kg'})" required>
             <button type="submit" class="btn btn-primary">Log</button>
           </div>
+          <label class="sodium-toggle-label" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.65rem; font-size: 0.84rem; color: var(--text-secondary); cursor: pointer;">
+            <input type="checkbox" name="isSodiumSpike" id="sodium-spike-checkbox" style="width: auto; cursor: pointer; accent-color: var(--accent);">
+            <span>🧂 Refeição livre / Sódio alto ontem (amortecer retenção hídrica)</span>
+          </label>
         </form>
         ${trend?.measured != null ? `<p class="hint">Last measured: ${formatWeight(trend.measured, units)} · Trend: ${formatWeight(trend.trend, units)}</p>` : ''}
       </div>` : `
       <div class="card card-info">
         <h3>Next Weigh-in</h3>
         <p>${c.nextWeighIn === today() ? 'Tomorrow' : c.nextWeighIn}</p>
+        <details style="margin-top: 0.5rem;">
+          <summary style="cursor: pointer; font-size: 0.85rem; color: var(--accent);">Log weight anyway today</summary>
+          <form id="weigh-in-form" style="margin-top: 0.5rem;">
+            <div class="form-row">
+              <input type="number" name="weight" step="0.1" placeholder="Weight (${units === 'imperial' ? 'lb' : 'kg'})" required>
+              <button type="submit" class="btn btn-primary">Log</button>
+            </div>
+            <label class="sodium-toggle-label" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.65rem; font-size: 0.84rem; color: var(--text-secondary); cursor: pointer;">
+              <input type="checkbox" name="isSodiumSpike" id="sodium-spike-checkbox-extra" style="width: auto; cursor: pointer; accent-color: var(--accent);">
+              <span>🧂 Refeição livre / Sódio alto ontem (amortecer retenção hídrica)</span>
+            </label>
+          </form>
+        </details>
       </div>`}
 
       <div class="card">
@@ -823,9 +932,22 @@ class MasscienceApp {
       <p class="hint">${c.bfEstimate.note || 'Massa livre de gordura estimada ≠ tecido muscular isolado'}</p>
       <div class="card-grid">
         <div class="card card-stat"><span class="stat-label">Peso de tendência</span><span class="stat-value">${formatWeight(weight, units)}</span></div>
-        <div class="card card-stat"><span class="stat-label">Gordura corporal estimada (%BF)</span><span class="stat-value">~${c.bfEstimate.low}–${c.bfEstimate.high}%</span><span class="stat-hint">${formatConfidenceLabel(c.bfEstimate.confidenceDetail?.label)}</span></div>
-        <div class="card card-stat"><span class="stat-label">Massa livre de gordura estimada</span><span class="stat-value">${formatWeight(comp.leanMass.low, units)}–${formatWeight(comp.leanMass.high, units)}</span></div>
-        <div class="card card-stat"><span class="stat-label">Tecido adiposo estimado</span><span class="stat-value">${formatWeight(comp.fatMass.low, units)}–${formatWeight(comp.fatMass.high, units)}</span></div>
+        <div class="card card-stat">
+          <span class="stat-label">Gordura corporal estimada (%BF)</span>
+          <span class="stat-value">${c.bfEstimate.estimate}%</span>
+          <span class="stat-range">Faixa: ${c.bfEstimate.low}–${c.bfEstimate.high}%</span>
+          <span class="stat-hint">${formatConfidenceLabel(c.bfEstimate.confidenceDetail?.label)}</span>
+        </div>
+        <div class="card card-stat">
+          <span class="stat-label">Massa livre de gordura estimada</span>
+          <span class="stat-value">~${formatWeight(comp.leanMass.mid, units)}</span>
+          <span class="stat-range">Faixa: ${formatWeight(comp.leanMass.low, units)}–${formatWeight(comp.leanMass.high, units)}</span>
+        </div>
+        <div class="card card-stat">
+          <span class="stat-label">Tecido adiposo estimado</span>
+          <span class="stat-value">~${formatWeight(comp.fatMass.mid, units)}</span>
+          <span class="stat-range">Faixa: ${formatWeight(comp.fatMass.low, units)}–${formatWeight(comp.fatMass.high, units)}</span>
+        </div>
         <div class="card card-stat"><span class="stat-label">FFMI estimado</span><span class="stat-value">~${round(ffmi, 1)}</span></div>
       </div>
       <button class="btn btn-secondary" data-action="update-bf">Update BF Estimate</button>
@@ -844,20 +966,37 @@ class MasscienceApp {
       </div>
 
       <div class="card">
-        <h3>Body Check</h3>
-        <p class="hint">Every 2–4 weeks. Improves body-composition estimates.</p>
+        <h3>Body Check (Opcional)</h3>
+        <p class="hint">A cada 2–4 semanas. Insira exames laboratoriais, dobras com adipômetro ou medidas corporais opcionais.</p>
         <form id="body-check-form">
           <div class="form-grid">
-            <div class="form-group"><label>Waist (cm)</label><input type="number" name="waist" step="0.1"></div>
-            <div class="form-group"><label>Neck (cm)</label><input type="number" name="neck" step="0.1"></div>
-            <div class="form-group"><label>Chest (cm)</label><input type="number" name="chest" step="0.1"></div>
-            <div class="form-group"><label>Arm (cm)</label><input type="number" name="arm" step="0.1"></div>
-            <div class="form-group"><label>Thigh (cm)</label><input type="number" name="thigh" step="0.1"></div>
-            ${state.profile.sex === 'female' ? '<div class="form-group"><label>Hip (cm)</label><input type="number" name="hip" step="0.1"></div>' : ''}
-            <div class="form-group form-group-full"><label>Progress photo (optional, stored locally)</label>
+            <div class="form-group"><label>BF direto (%) — Exame / DEXA / Adipômetro</label><input type="number" name="bodyFatPercent" step="0.1" min="3" max="50" placeholder="Ex: 12.5"></div>
+            <div class="form-group"><label>Origem do BF</label>
+              <select name="method">
+                <option value="direct">DEXA / Exame Clínico (Mais preciso)</option>
+                <option value="caliper">Adipômetro / Dobras Cutâneas</option>
+                <option value="bia">Bioimpedância (Balança)</option>
+                <option value="manual">Estimativa Visual / Outro</option>
+              </select>
+            </div>
+            ${state.profile.sex === 'female' ? `
+            <div class="form-group"><label>Dobra Tríceps (mm)</label><input type="number" name="triceps" step="0.5"></div>
+            <div class="form-group"><label>Dobra Supra-ilíaca (mm)</label><input type="number" name="suprailiac" step="0.5"></div>
+            <div class="form-group"><label>Dobra Coxa (mm)</label><input type="number" name="thighFold" step="0.5"></div>
+            ` : `
+            <div class="form-group"><label>Dobra Peitoral (mm)</label><input type="number" name="chestFold" step="0.5"></div>
+            <div class="form-group"><label>Dobra Abdominal (mm)</label><input type="number" name="abdomenFold" step="0.5"></div>
+            <div class="form-group"><label>Dobra Coxa (mm)</label><input type="number" name="thighFold" step="0.5"></div>
+            `}
+            <div class="form-group"><label>Cintura (cm) — opcional</label><input type="number" name="waist" step="0.1"></div>
+            <div class="form-group"><label>Braço (cm) — opcional</label><input type="number" name="arm" step="0.1"></div>
+            <div class="form-group"><label>Pescoço (cm) — opcional</label><input type="number" name="neck" step="0.1"></div>
+            <div class="form-group"><label>Coxa (cm) — opcional</label><input type="number" name="thigh" step="0.1"></div>
+            ${state.profile.sex === 'female' ? '<div class="form-group"><label>Quadril (cm) — opcional</label><input type="number" name="hip" step="0.1"></div>' : ''}
+            <div class="form-group form-group-full"><label>Foto de progresso (opcional, privada local)</label>
               <input type="file" name="photo" accept="image/*" id="body-photo-input"></div>
           </div>
-          <button type="submit" class="btn btn-primary">Save Body Check</button>
+          <button type="submit" class="btn btn-primary">Salvar Body Check</button>
         </form>
       </div>
 
@@ -992,7 +1131,17 @@ class MasscienceApp {
         </div>`).join('')}
       <div class="card">
         <h3>Current Cycle Weigh-ins</h3>
-        <p>${state.weightMeasurements.filter(m => !m.isEstimated).length} measured · ${state.weightMeasurements.filter(m => m.isEstimated).length} estimated</p>
+        <p class="hint">${state.weightMeasurements.filter(m => !m.isEstimated).length} measured · ${state.weightMeasurements.filter(m => m.isEstimated).length} estimated</p>
+        <div class="weigh-in-history-list" style="margin-top: 0.8rem; display: flex; flex-direction: column; gap: 0.4rem; max-height: 240px; overflow-y: auto;">
+          ${state.weightMeasurements.filter(m => !m.isEstimated).slice(-15).reverse().map(m => `
+            <div class="history-entry" style="display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0.65rem; background: rgba(255,255,255,0.02); border-radius: var(--radius); font-size: 0.85rem;">
+              <span><strong>${m.date}</strong>: ${m.weight} kg</span>
+              <div>
+                ${m.isSodiumSpike ? '<span class="status-badge status-yellow" style="font-size: 0.72rem; padding: 2px 6px;">🧂 Refeição livre / Sódio</span>' : (m.isOutlier ? '<span class="status-badge status-neutral" style="font-size: 0.72rem; padding: 2px 6px;">💧 Retenção</span>' : '<span style="color: var(--text-muted); font-size: 0.75rem;">Normal</span>')}
+              </div>
+            </div>
+          `).join('') || '<p class="hint">No measurements recorded yet.</p>'}
+        </div>
       </div>
       <div class="card">
         <h3>Scientific Cycle Report</h3>
@@ -1128,7 +1277,7 @@ class MasscienceApp {
       <div class="card"><h3>How calorie adjustments work</h3>
         <p>Your actual rate of gain is compared to your target. Deviations outside a deadband trigger conservative adjustments (50–200 kcal), with a 7-day cooldown.</p></div>
       <div class="card"><h3>Why BF is an estimate</h3>
-        <p>Without lab measurement, body fat cannot be known precisely. Masscience combines your initial estimate, Navy method measurements, and weight trends.</p></div>
+        <p>Sem exames laboratoriais diretos como DEXA, a gordura corporal não é absoluta. O Masscience combina sua estimativa inicial calibrada, balanço energético termodinâmico e tendências probabilísticas de peso, com calibração opcional por dobras ou exames diretos.</p></div>
       <div class="card"><h3>Weigh-in frequency</h3>
         <p>Daily weighing during calibration builds your trend model. As stability increases, frequency reduces to every-other-day, then 3× weekly.</p></div>
       <div class="card"><h3>Core principle</h3>

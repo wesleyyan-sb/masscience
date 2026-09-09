@@ -87,7 +87,7 @@ function fitRollingTrend(measuredOnly, startDate, options = {}) {
     y: effectiveWeight(m),
   }));
   const weights = win.map((m, idx) => {
-    let w = m.isOutlier ? TREND.WEIGHT_OUTLIER : localOutlierWeight(win, idx);
+    let w = (m.isOutlier || m.isSodiumSpike) ? TREND.WEIGHT_OUTLIER : localOutlierWeight(win, idx);
     if (phaseStart && m.date < phaseStart) {
       const daysPrior = Math.max(1, daysBetween(m.date, phaseStart));
       w *= clamp(Math.pow(0.5, daysPrior / 2.0), 0.04, 0.25);
@@ -119,7 +119,7 @@ function localOutlierWeight(series, index) {
 }
 
 function effectiveWeight(m) {
-  if (m.isOutlier && m.trendWeight != null) return m.trendWeight;
+  if ((m.isOutlier || m.isSodiumSpike) && m.trendWeight != null) return m.trendWeight;
   return m.weight;
 }
 
@@ -137,7 +137,9 @@ function buildTrendSeries(sorted, startDate, regression) {
       trend: round(trend, 2),
       noise: observed != null ? round(observed - trend, 2) : null,
       isEstimated: !!m.isEstimated,
-      isOutlier: !!m.isOutlier,
+      isOutlier: !!m.isOutlier || !!m.isSodiumSpike,
+      isSodiumSpike: !!m.isSodiumSpike,
+      outlierReason: m.outlierReason || (m.isSodiumSpike ? 'sodium_spike' : (m.isOutlier ? 'water_spike' : null)),
     };
   });
 }
@@ -174,7 +176,7 @@ export function calculateRateOfGain(series, measuredOnly, startDate, options = {
     y: effectiveWeight(m),
   }));
   const weights = win.map((m, idx) => {
-    let w = m.isOutlier ? TREND.WEIGHT_OUTLIER : (m.isEstimated ? TREND.WEIGHT_ESTIMATED : localOutlierWeight(win, idx));
+    let w = (m.isOutlier || m.isSodiumSpike) ? TREND.WEIGHT_OUTLIER : (m.isEstimated ? TREND.WEIGHT_ESTIMATED : localOutlierWeight(win, idx));
     if (phaseStart && m.date < phaseStart) {
       const daysPrior = Math.max(1, daysBetween(m.date, phaseStart));
       w *= clamp(Math.pow(0.5, daysPrior / 2.0), 0.04, 0.25);

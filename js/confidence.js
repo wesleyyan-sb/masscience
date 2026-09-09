@@ -69,9 +69,16 @@ export function calculateBFConfidence(sources) {
   const avgSigma = sources.reduce((a, s) => a + (s.sigma || BODY_COMP.SIGMA_USER_BF), 0) / sources.length;
   score += clamp((5 - avgSigma) / 5, 0, 1) * 30;
 
-  if (sources.some(s => s.type === 'navy')) score += 15;
+  if (sources.some(s => s.type === 'dexa')) score += 25;
+  else if (sources.some(s => s.type === 'caliper')) score += 20;
+  else if (sources.some(s => s.type === 'bia')) score += 8;
+  else if (sources.some(s => s.type === 'navy')) score += 3;
 
-  return buildConfidence(clamp(Math.round(score), 0, 85), 'Heuristic confidence — not clinical precision');
+  const hasHighPrecision = sources.some(s => s.type === 'dexa' || s.type === 'caliper');
+  return buildConfidence(
+    clamp(Math.round(score), 0, 88),
+    hasHighPrecision ? 'Direct measurement calibrated' : 'Heuristic confidence — probabilistic model'
+  );
 }
 
 export function calculateProjectionConfidence(ctx) {

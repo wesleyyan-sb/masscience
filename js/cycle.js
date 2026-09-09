@@ -1,12 +1,12 @@
 /**
  * Masscience — Cycle management engine
  */
-import { CYCLE, PHASE, WEIGH_IN, BODY_CHECK_INTERVAL_DAYS, ALGORITHM_VERSION } from './constants.js';
+import { CYCLE, PHASE, WEIGH_IN, BODY_CHECK_INTERVAL_DAYS, ALGORITHM_VERSION, MINICUT_CONFIG } from './constants.js';
 import {
-  today, daysBetween, addDays, uuid, getWeekNumber,
+  today, daysBetween, addDays, uuid, getWeekNumber, round, median,
 } from './utils.js';
 import {
-  initialCalorieTarget, buildInitialPlan,
+  initialCalorieTarget, buildInitialPlan, planMinicutEnergyTarget,
 } from './calculations.js';
 import {
   processWeightData, isTrendStable, isTrendUnstable, estimateMissingWeights, detectOutlier,
@@ -14,6 +14,7 @@ import {
 
 export function createCycle(profile, settings, plan) {
   const startDate = today();
+  const startBf = profile.bodyFatPercent;
   return {
     id: uuid(),
     number: 1,
@@ -27,6 +28,8 @@ export function createCycle(profile, settings, plan) {
     pausedAt: null,
     initialTDEE: plan.tdee,
     initialWeight: profile.weightKg,
+    startingBf: startBf,
+    cycleStartingBodyFatPercentage: startBf,
     maxBf: plan.maxBf,
     algorithmVersion: ALGORITHM_VERSION,
     currentDate: startDate,
@@ -43,8 +46,32 @@ export function advanceCyclePhase(state, settings) {
     return transitionToMinicut(state, settings);
   }
 
-  if (cycle.phase === PHASE.MINICUT && daysInPhase >= cycle.phaseWeeks * 7) {
-    return completeCycle(state, settings);
+  if (cycle.phase === PHASE.MINICUT) {
+    const targetBf = cycle.targetBf ?? cycle.startingBf ?? state.profile.bodyFatPercent;
+    const tolerance = cycle.bodyFatTargetTolerance ?? MINICUT_CONFIG?.BF_TOLERANCE ?? 0.3;
+    const currentBf = state.algorithmState.smoothedBf ?? state.profile.bodyFatPercent;
+    const minDays = MINICUT_CONFIG?.MIN_STABILIZATION_DAYS ?? 14;
+    const maxDays = MINICUT_CONFIG?.SAFETY_CEILING_DAYS ?? 70;
+
+    const targetReached = currentBf <= (targetBf + tolerance);
+
+    if (daysInPhase >= minDays && targetReached) {
+      return completeCycle(state, settings, { targetReached: true, exitReason: 'MINICUT_BF_TARGET_REACHED' });
+    }
+
+    if (daysInPhase >= maxDays) {
+      return completeCycle(state, settings, { targetReached, exitReason: 'MINICUT_SAFETY_CEILING_REACHED' });
+    }
+
+    // If past preferred days (21 days) but target not yet reached: mark extension
+    const preferredDays = cycle.preferredDays ?? 21;
+    if (daysInPhase > preferredDays) {
+      cycle.extended = true;
+      cycle.minicutExtensionRequired = true;
+      cycle.minicutExtensionDurationDays = daysInPhase - preferredDays;
+    }
+
+    return state;
   }
 
   return state;
@@ -53,13 +80,28 @@ export function advanceCyclePhase(state, settings) {
 function transitionToMinicut(state, settings) {
   const cycle = state.currentCycle;
   const tdee = state.algorithmState.estimatedTDEE || cycle.initialTDEE;
-  const minicutCalories = initialCalorieTarget(tdee, PHASE.MINICUT);
+  const currentWeight = state.profile.weightKg;
+  const currentBf = state.algorithmState.smoothedBf ?? state.profile.bodyFatPercent;
+  const startingBf = cycle.startingBf ?? cycle.initialBf ?? state.profile.bodyFatPercent;
+
+  const plan = planMinicutEnergyTarget(currentWeight, currentBf, startingBf, tdee, MINICUT_CONFIG?.PREFERRED_DAYS ?? 21);
+  const minicutCalories = plan.targetCalories;
 
   const updatedCycle = {
     ...cycle,
     phase: PHASE.MINICUT,
     phaseStartDate: today(),
-    phaseWeeks: settings.minicutWeeks,
+    phaseWeeks: Math.ceil((plan.projectedDaysToTarget || 21) / 7),
+    preferredDays: MINICUT_CONFIG?.PREFERRED_DAYS ?? 21,
+    startingBf,
+    targetBf: startingBf,
+    bodyFatTargetTolerance: MINICUT_CONFIG?.BF_TOLERANCE ?? 0.3,
+    initialRequiredDeficit: plan.requiredDeficit,
+    appliedDeficit: plan.appliedDeficit,
+    projectedDaysToTarget: plan.projectedDaysToTarget,
+    minicutExtensionRequired: plan.extensionLikely,
+    minicutExtensionDurationDays: plan.extensionDays,
+    extended: false,
     calibrating: false,
   };
 
@@ -87,9 +129,12 @@ function transitionToMinicut(state, settings) {
   };
 }
 
-function completeCycle(state, settings) {
+function completeCycle(state, settings, meta = {}) {
   const cycle = state.currentCycle;
   const trendData = processWeightData(state.weightMeasurements, cycle.startDate);
+
+  const finalBf = state.algorithmState.smoothedBf ?? state.profile.bodyFatPercent;
+  const startingBf = cycle.startingBf ?? cycle.initialBf ?? state.profile.bodyFatPercent;
 
   const summary = {
     id: cycle.id,
@@ -98,7 +143,15 @@ function completeCycle(state, settings) {
     endDate: today(),
     initialWeight: cycle.initialWeight,
     finalWeight: trendData.latest?.trend || cycle.initialWeight,
-    initialBf: state.profile.bodyFatPercent,
+    initialBf: startingBf,
+    startingBf,
+    targetBf: cycle.targetBf ?? startingBf,
+    finalBf,
+    minicutBodyFatTargetError: round(finalBf - startingBf, 2),
+    minicutTargetReached: meta.targetReached ?? (finalBf <= (cycle.targetBf ?? startingBf) + (MINICUT_CONFIG?.BF_TOLERANCE ?? 0.3)),
+    exitReason: meta.exitReason ?? 'MINICUT_BF_TARGET_REACHED',
+    minicutExtensionRequired: cycle.minicutExtensionRequired ?? false,
+    minicutExtensionDurationDays: cycle.minicutExtensionDurationDays ?? 0,
     bulkWeeks: settings.bulkWeeks,
     minicutWeeks: settings.minicutWeeks,
     calorieAdjustments: state.calorieHistory.filter(c => c.date >= cycle.startDate).length,
@@ -120,6 +173,8 @@ function completeCycle(state, settings) {
     paused: false,
     initialTDEE: tdee,
     initialWeight: trendData.latest?.trend || state.profile.weightKg,
+    startingBf: finalBf,
+    cycleStartingBodyFatPercentage: finalBf,
     maxBf: plan.maxBf,
     algorithmVersion: ALGORITHM_VERSION,
     currentDate: today(),
@@ -309,17 +364,28 @@ export function isBodyCheckDue(state) {
   return daysBetween(lastCheck, today()) >= BODY_CHECK_INTERVAL_DAYS;
 }
 
-export function addWeightMeasurement(state, weight) {
-  const date = today();
+export function addWeightMeasurement(state, weight, options = {}) {
+  const date = options.date || today();
   const existing = state.weightMeasurements.findIndex(m => m.date === date && !m.isEstimated);
-  const outlier = detectOutlier(state.weightMeasurements.filter(m => !m.isEstimated), weight);
+  const measuredHistory = state.weightMeasurements.filter(m => !m.isEstimated && m.date !== date);
+  const outlier = detectOutlier(measuredHistory, weight);
+  const isSodiumSpike = !!options.isSodiumSpike;
+
+  let trendWeight = outlier.trendWeight;
+  if (isSodiumSpike && trendWeight == null) {
+    const recent = measuredHistory.slice(-14).map(m => m.weight);
+    const med = recent.length ? median(recent) : weight;
+    trendWeight = round(med + (weight - med) * 0.15, 2);
+  }
 
   const measurement = {
     date,
     weight: Math.round(weight * 100) / 100,
     isEstimated: false,
-    isOutlier: outlier.isOutlier,
-    trendWeight: outlier.trendWeight,
+    isOutlier: outlier.isOutlier || isSodiumSpike,
+    outlierReason: isSodiumSpike ? 'sodium_spike' : (outlier.isOutlier ? 'water_spike' : null),
+    isSodiumSpike,
+    trendWeight: trendWeight != null ? trendWeight : Math.round(weight * 100) / 100,
     modifiedZ: outlier.modifiedZ,
   };
 
