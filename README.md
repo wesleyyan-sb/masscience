@@ -112,6 +112,33 @@ The user does not need to understand the mathematics behind this system.
 
 **Masscience handles the calculations.**
 
+```
+
+PS C:\Users\yan\Documents\Masscience> python linesofcode.py
+
+============================================================
+                 CODE LINE COUNTER
+============================================================
+
+JavaScript              48 files        12,014 lines
+JSON                     8 files        11,680 lines
+Markdown                11 files         2,899 lines
+CSS                      2 files         1,326 lines
+XML                     12 files           303 lines
+Batch                    2 files           237 lines
+Python                   1 file            137 lines
+PowerShell               1 file             49 lines
+Shell                    1 file             44 lines
+Java                     3 files            38 lines
+HTML                     2 files            36 lines
+TypeScript               1 file              7 lines
+
+------------------------------------------------------------
+TOTAL                   92 files        28,770 lines
+============================================================
+
+```
+
 ---
 
 # ⚡ Core Features
