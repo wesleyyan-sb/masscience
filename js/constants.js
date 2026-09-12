@@ -2,8 +2,8 @@
  * Masscience Algorithm V2.1 — Constants
  * See ARCHITECTURE.md. Values marked (H) are heuristics, not lab-validated.
  */
-export const ALGORITHM_VERSION = '2.1.8';
-export const APP_VERSION = '2.1.8';
+export const ALGORITHM_VERSION = '2.1.9';
+export const APP_VERSION = '2.1.9';
 export const STORAGE_KEY = 'masscience_data';
 
 export const CYCLE = {

@@ -114,16 +114,16 @@ The user does not need to understand the mathematics behind this system.
 
 ```
 
-PS C:\Users\yan\Documents\Masscience> python linesofcode.py
+PS C:\Users\wesle\Documents\Masscience> python linesofcode.py
 
 ============================================================
                  CODE LINE COUNTER
 ============================================================
 
-JavaScript              48 files        12,014 lines
+JavaScript              49 files        12,682 lines
 JSON                     8 files        11,680 lines
-Markdown                11 files         2,899 lines
-CSS                      2 files         1,326 lines
+Markdown                11 files         2,920 lines
+CSS                      2 files         1,481 lines
 XML                     12 files           303 lines
 Batch                    2 files           237 lines
 Python                   1 file            137 lines
@@ -134,7 +134,7 @@ HTML                     2 files            36 lines
 TypeScript               1 file              7 lines
 
 ------------------------------------------------------------
-TOTAL                   92 files        28,770 lines
+TOTAL                   93 files        29,614 lines
 ============================================================
 
 ```
