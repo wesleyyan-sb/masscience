@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Masscience — Lean Bulk on Autopilot | Closed-Loop Hypertrophy & Minicut</title>
+  <meta name="description" content="Masscience is the first cybernetic fitness system that calibrates calories and minicuts from your body's true biological response, without obsessive food logging.">
+  <meta name="keywords" content="hypertrophy, lean bulk, minicut, adaptive TDEE, calorie controller, body fat estimation, fitness science, open source">
+  
+  <!-- Open Graph / Social Cards -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Masscience — Lean Bulk on Autopilot">
+  <meta property="og:description" content="The first closed-loop adaptive control system for muscle hypertrophy without food logging.">
+  <meta property="og:url" content="https://github.com/wesleyyan-sb/masscience">
+  <meta name="theme-color" content="#090d14">
+
+  <!-- Google Fonts: Plus Jakarta Sans & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Ambient Glow Backgrounds -->
+  <div class="glow-orb orb-1" aria-hidden="true"></div>
+  <div class="glow-orb orb-2" aria-hidden="true"></div>
+  <div class="glow-orb orb-3" aria-hidden="true"></div>
+
+  <!-- Header / Navigation -->
+  <header class="site-header" id="header">
+    <div class="container header-container">
+      <a href="https://github.com/wesleyyan-sb/masscience" target="_blank" rel="noopener noreferrer" class="brand-logo" aria-label="Masscience GitHub Repository">
+        <div class="logo-symbol">
+          <span class="symbol-pulse"></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+        </div>
+        <span class="logo-text">MASSCIENCE<span class="logo-accent">.</span></span>
+      </a>
+
+      <nav class="desktop-nav" aria-label="Main Navigation">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How It Works</a>
+        <a href="#simulator">Simulator</a>
+        <a href="#science">Science</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+
+      <div class="header-actions">
+        <!-- GitHub Repo Star Link -->
+        <a href="https://github.com/wesleyyan-sb/masscience" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-glass" aria-label="GitHub Repository">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          <span>Star on GitHub</span>
+        </a>
+
+        <!-- Primary CTA to Repo -->
+        <a href="https://github.com/wesleyyan-sb/masscience" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary glow-effect">
+          <span>View Repository</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+        </a>
+      </div>
+
+      <!-- Mobile Menu Button -->
+      <button class="mobile-toggle" id="mobile-toggle" aria-label="Open menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+
+    <!-- Mobile Nav Drawer -->
+    <div class="mobile-drawer" id="mobile-drawer">
+      <nav class="mobile-nav">
+        <a href="#features" class="mobile-link">Features</a>
+        <a href="#how-it-works" class="mobile-link">How It Works</a>
+        <a href="#simulator" class="mobile-link">Simulator</a>
+        <a href="#science" class="mobile-link">Science</a>
+        <a href="#faq" class="mobile-link">FAQ</a>
+        <a href="https://github.com/wesleyyan-sb/masscience" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="margin-top: 1rem;">
+          <span>View on GitHub</span>
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero-section">
+    <div class="container hero-container">
+      <div class="hero-content">
+        <div class="hero-badge animate-fade">
+          <span class="badge-dot"></span>
+          <span class="badge-text">Cybernetic Engine v2.4 • Zero Food Logging Required</span>
+        </div>
+
+        <h1 class="hero-title animate-fade delay-1">
+          <span>Build Muscle Mass on</span>
+          <span class="text-gradient">Pure Autopilot.</span>
+        </h1>
+
+        <p class="hero-description animate-fade delay-2">
+          The first closed-loop adaptive control system that calibrates calories and minicuts from your body's true biological response. Ignore acute sodium, water, and creatine spikes while building lean tissue with clinical precision.
+        </p>
+
+        <div class="hero-cta-group animate-fade delay-3">
+          <a href="https://github.com/wesleyyan-sb/masscience" target="_blank" rel="noopener noreferrer" class="btn btn-lg btn-primary glow-effect">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+            <span>Explore on GitHub</span>
+          </a>
+          <a href="#simulator" class="btn btn-lg btn-glass">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
+            <span>Live Interactive Simulator</span>
+          </a>
+        </div>
+
+        <div class="hero-metrics-bar animate-fade delay-4">
+          <div class="metric-item">
+            <span class="metric-val">0.994</span>
+            <span class="metric-lbl">Trend Weight Correlation</span>
+          </div>
+          <div class="metric-divider"></div>
+          <div class="metric-item">
+            <span class="metric-val">&le; 650 kcal</span>
+            <span class="metric-lbl">Safe Minicut Deficit Cap</span>
+          </div>
+          <div class="metric-divider"></div>
+          <div class="metric-item">
+            <span class="metric-val">99.9%</span>
+            <span class="metric-lbl">Muscle Mass Preserved</span>
+          </div>
+          <div class="metric-divider"></div>
+          <div class="metric-item">
+            <span class="metric-val">100%</span>
+            <span class="metric-lbl">Private &amp; Offline-First</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hero Visual / Live App Interactive Card -->
+      <div class="hero-visual animate-fade delay-2">
+        <div class="mockup-frame">
+          <div class="phone-glow"></div>
+          <div class="phone-shell">
+            <!-- Screen Header -->
+            <div class="phone-header">
+              <span class="phone-status-time">07:30</span>
+              <div class="phone-notch"></div>
+              <div class="phone-status-icons">
+                <span class="status-indicator-dot"></span>
+                <span>100%</span>
+              </div>
+            </div>
+
+            <!-- App Mockup Content -->
+            <div class="mockup-screen">
+              <div class="mockup-top-bar">
+                <div class="mockup-logo">MASSCIENCE</div>
+                <div class="mockup-phase-tag">LEAN BULK • WEEK 6/10</div>
+              </div>
+
+              <!-- Live Status Card -->
+              <div class="mock-card mock-hero-card">
+                <div class="mock-status-pill green">
+                  <span class="pill-dot"></span>
+                  <span>ON TRACK (+0.19 kg/wk)</span>
+                </div>
+                <div class="mock-weight-display">74.80 <span class="mock-unit">kg</span></div>
+                <div class="mock-rate-sub">Target: +0.20 kg/wk • Confidence: 94%</div>
+
+                <!-- Mini SVG Trajectory Chart -->
+                <div class="mock-chart-wrap">
+                  <svg class="mock-chart-svg" viewBox="0 0 280 90">
+                    <defs>
+                      <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.35"/>
+                        <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.0"/>
+                      </linearGradient>
+                    </defs>
+                    <!-- Target line -->
+                    <line x1="10" y1="75" x2="270" y2="25" stroke="rgba(255,255,255,0.18)" stroke-dasharray="4 4" stroke-width="1.5"/>
+                    <!-- Area fill -->
+                    <path d="M10,78 Q60,70 110,58 T210,38 T270,22 L270,90 L10,90 Z" fill="url(#chartGrad)"/>
+                    <!-- Trend line -->
+                    <path d="M10,78 Q60,70 110,58 T210,38 T270,22" fill="none" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+                    <!-- Noisy points with outliers dampened -->
+                    <circle cx="20" cy="80" r="3" fill="#94a3b8" opacity="0.6"/>
+                    <circle cx="55" cy="65" r="3" fill="#94a3b8" opacity="0.6"/>
+                    <circle cx="95" cy="74" r="3" fill="#94a3b8" opacity="0.6"/>
+                    <circle cx="130" cy="45" r="4" fill="#fbbf24" stroke="#000" stroke-width="1"/> <!-- Sodium spike point -->
+                    <circle cx="170" cy="48" r="3" fill="#94a3b8" opacity="0.6"/>
+                    <circle cx="210" cy="36" r="3" fill="#94a3b8" opacity="0.6"/>
+                    <circle cx="250" cy="28" r="3" fill="#94a3b8" opacity="0.6"/>
+                    <circle cx="270" cy="22" r="5" fill="#10b981" stroke="#fff" stroke-width="1.5"/> <!-- Latest point -->
+                  </svg>
+                  <div class="mock-chart-caption">
+                    <span>Damped tissue trend</span>
+                    <span class="badge-tag badge-tag-sodium">🧂 Sodium Ignored</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Recommendation Card -->
+              <div class="mock-card mock-target-card">
+                <div class="mock-target-header">
+                  <span class="mock-card-title">Caloric Target Recommendation</span>
+                  <span class="mock-cal-num">2,850 kcal/day</span>
+                </div>
+                <div class="mock-macros-row">
+                  <div class="mock-macro"><span>Protein</span><strong>150g</strong></div>
+                  <div class="mock-macro"><span>Carbs</span><strong>390g</strong></div>
+                  <div class="mock-macro"><span>Fats</span><strong>75g</strong></div>
+                  <div class="mock-macro"><span>Water</span><strong>3.2L</strong></div>
+                </div>
+              </div>
+
+              <!-- Context Tags Demo -->
+              <div class="mock-card mock-tags-card">
+                <div class="mock-tags-title">Physiological Check-in Tags</div>
+                <div class="mock-chips-grid">
+                  <span class="mock-chip selected">🧂 Free meal / Sodium</span>
+                  <span class="mock-chip selected">🏋️ Leg day DOMS</span>
+                  <span class="mock-chip">💊 Creatina</span>
+                  <span class="mock-chip">💤 Sleep &lt; 6h</span>
+                </div>
+              </div>
+
+              <!-- Bottom Nav Mockup -->
+              <div class="mock-bottom-nav">
+                <div class="mock-nav-item active"><span class="nav-icon">⌂</span><span>Today</span></div>
+                <div class="mock-nav-item"><span class="nav-icon">📈</span><span>Evolution</span></div>
+                <div class="mock-nav-item"><span class="nav-icon">🔄</span><span>Strategy</span></div>
+                <div class="mock-nav-item"><span class="nav-icon">⚙</span><span>More</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Problem vs Solution Section -->
+  <section class="problem-section" id="how-it-works">
+    <div class="container">
+      <div class="section-badge">WHY STANDARD APPS FAIL</div>
+      <h2 class="section-title text-center">The Gap Between the Scale and Real Muscle</h2>
+      <p class="section-subtitle text-center">
+        You ate pizza on Saturday and woke up Monday with +1.5 kg on the scale. Was it fat? No. It was transient fluid retention from sodium and glycogen storage.
+      </p>
+
+      <div class="comparison-grid">
+        <!-- Old way card -->
+        <div class="comparison-card old-way">
+          <div class="card-status-flag red">THE TRADITIONAL &amp; OBSESSIVE WAY</div>
+          <h3>Neurotic Logging &amp; False Panic</h3>
+          <ul class="comp-list">
+            <li>
+              <span class="icon red">&times;</span>
+              <div>
+                <strong>Weighing every single lettuce leaf</strong>
+                <p>You waste 30 minutes every day scanning food barcodes that carry up to a legal 20% error margin on nutrition facts.</p>
+              </div>
+            </li>
+            <li>
+              <span class="icon red">&times;</span>
+              <div>
+                <strong>Static formulas from 1919</strong>
+                <p>Formulas like Harris-Benedict assume your daily energy expenditure is static, ignoring acute metabolic adaptation.</p>
+              </div>
+            </li>
+            <li>
+              <span class="icon red">&times;</span>
+              <div>
+                <strong>Scale weight panic</strong>
+                <p>Any temporary water spike or heavy leg workout causes standard apps to slash calories, sabotaging your anabolic surplus.</p>
+              </div>
+            </li>
+            <li>
+              <span class="icon red">&times;</span>
+              <div>
+                <strong>Endless, unguided minicuts</strong>
+                <p>Without rigorous termination targets, you waste valuable bulking months or burn through hard-earned lean muscle tissue.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Masscience way card -->
+        <div class="comparison-card masscience-way">
+          <div class="card-status-flag green">THE MASSCIENCE CYBERNETIC WAY</div>
+          <h3>Adaptive Closed-Loop Control</h3>
+          <ul class="comp-list">
+            <li>
+              <span class="icon green">&check;</span>
+              <div>
+                <strong>Your body is the ultimate food scale</strong>
+                <p>Instead of weighing chicken, you log morning weights and the model infers your latent TDEE continuously from physical response.</p>
+              </div>
+            </li>
+            <li>
+              <span class="icon green">&check;</span>
+              <div>
+                <strong>Decoupling transient fluid noise</strong>
+                <p>Tissue inertia filtering dampens pizza, creatine, DOMS, and acute cortisol spikes without mutating raw scale records.</p>
+              </div>
+            </li>
+            <li>
+              <span class="icon green">&check;</span>
+              <div>
+                <strong>Damped calorie adjustments</strong>
+                <p>The controller uses deadband thresholds and 7-day cooldowns. No erratic swings: only smooth, honest micro-adjustments.</p>
+              </div>
+            </li>
+            <li>
+              <span class="icon green">&check;</span>
+              <div>
+                <strong>21-day minicuts with 650 kcal cap</strong>
+                <p>Strict target to return to cycle starting BF with 99.9% lean mass preservation, automatically advancing to the next bulk.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Live Simulator Widget -->
+  <section class="simulator-section" id="simulator">
+    <div class="container">
+      <div class="section-badge">LIVE INTERACTIVE DEMO</div>
+      <h2 class="section-title text-center">Watch the Algorithm Dampen Fluid Spikes</h2>
+      <p class="section-subtitle text-center">
+        Simulate a real-world scenario: you were on track and had a high-sodium dinner or intense leg session. See how Masscience protects your calories:
+      </p>
+
+      <div class="sim-container">
+        <div class="sim-controls">
+          <div class="sim-control-group">
+            <label class="sim-label" for="sim-starting-weight">
+              <span>Athlete Baseline Weight:</span>
+              <strong id="sim-weight-val">74.0 kg</strong>
+            </label>
+            <input type="range" id="sim-starting-weight" min="60" max="95" step="0.5" value="74" class="sim-slider">
+          </div>
+
+          <div class="sim-control-group">
+            <label class="sim-label">Select the Atypical Event:</label>
+            <div class="sim-event-buttons">
+              <button class="event-btn active" data-spike="1.6" data-type="sodium">
+                🧂 High-Sodium Free Meal (+1.6 kg)
+              </button>
+              <button class="event-btn" data-spike="1.2" data-type="doms">
+                🏋️ Heavy Leg Day DOMS (+1.2 kg)
+              </button>
+              <button class="event-btn" data-spike="1.8" data-type="creatine">
+                💊 Creatine Saturation Loading (+1.8 kg)
+              </button>
+              <button class="event-btn" data-spike="0.0" data-type="none">
+                ✨ Stable Trajectory (No Event)
+              </button>
+            </div>
+          </div>
+
+          <div class="sim-event-explanation" id="sim-event-desc">
+            🧂 <strong>Free meal / High sodium:</strong> Transient osmotic fluid retention. Standard apps assume you gained 1.6 kg of fat and cut 400 kcal. Masscience dampens 85% of this spike.
+          </div>
+        </div>
+
+        <div class="sim-output-card">
+          <div class="sim-output-header">
+            <span class="sim-out-title">Masscience Algorithm Response</span>
+            <div class="sim-legend">
+              <span class="legend-item"><span class="dot raw"></span> <span>Raw Scale Reading</span></span>
+              <span class="legend-item"><span class="dot trend"></span> <span>Masscience Filtered Trend</span></span>
+            </div>
+          </div>
+
+          <div class="sim-canvas-wrapper">
+            <canvas id="interactive-sim-canvas" width="600" height="240"></canvas>
+          </div>
+
+          <div class="sim-result-metrics">
+            <div class="res-box">
+              <span class="res-lbl">Raw Scale Jump</span>
+              <strong class="res-val red" id="res-spike-val">+1.60 kg</strong>
+            </div>
+            <div class="res-box">
+              <span class="res-lbl">True Trend Drift</span>
+              <strong class="res-val green" id="res-trend-val">+0.24 kg</strong>
+            </div>
+            <div class="res-box">
+              <span class="res-lbl">Controller Decision</span>
+              <strong class="res-val cyan" id="res-cal-decision">Maintain Calories Stable</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Key Features Grid -->
+  <section class="features-section" id="features">
+    <div class="container">
+      <div class="section-badge">ELITE ARCHITECTURE</div>
+      <h2 class="section-title text-center">Built for Athletes Who Demand Real Progress</h2>
+      <p class="section-subtitle text-center">
+        Every line of Masscience code was engineered to solve real human physiological challenges and remove obsessive mental friction.
+      </p>
+
+      <div class="features-grid">
+        <!-- Feature 1 -->
+        <div class="feature-card">
+          <div class="feature-icon cyan">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+          </div>
+          <h3>Nutrition Without Food Logging</h3>
+          <p>Stop scanning barcodes. Based on your actual gain rate and adaptive expenditure, the app recommends practical food tweaks like "+1 tbsp peanut butter or +1 banana" without kitchen scales.</p>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="feature-card">
+          <div class="feature-icon emerald">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          </div>
+          <h3>Minicuts That Stay "Mini"</h3>
+          <p>Non-negotiable goal of returning to cycle baseline body fat within ~21 days, capped at 650 kcal/day deficit to shield your hard-earned muscle tissue.</p>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="feature-card">
+          <div class="feature-icon violet">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          </div>
+          <h3>Continuous Infinite Cycling</h3>
+          <p>Finished your minicut? Masscience calculates your new baseline and advances smoothly into the next Lean Bulk (Cycle #2, #3, #N) without reconfiguring from scratch.</p>
+        </div>
+
+        <!-- Feature 4 -->
+        <div class="feature-card">
+          <div class="feature-icon amber">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          </div>
+          <h3>Physiological Check-in Tags</h3>
+          <p>1-tap toggles for poor sleep, heavy leg day DOMS, creatine loading, and free meals. The filter dampens water noise without altering raw history records.</p>
+        </div>
+
+        <!-- Feature 5 -->
+        <div class="feature-card">
+          <div class="feature-icon blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+          </div>
+          <h3>Monte Carlo Probabilistic Projections</h3>
+          <p>Powered by 800+ stochastic simulations, view scientifically honest probability intervals for weight and fat mass at cycle completion.</p>
+        </div>
+
+        <!-- Feature 6 -->
+        <div class="feature-card">
+          <div class="feature-icon green">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+          </div>
+          <h3>4 Mobile Tabs &amp; 100% Offline-First</h3>
+          <p>Modernized 4-tab thumb-friendly interface. Your data belongs to you: stored locally on your device with no trackers, external databases, or intrusive ads.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Architecture & Science Section -->
+  <section class="science-section" id="science">
+    <div class="container">
+      <div class="science-layout">
+        <div class="science-text">
+          <div class="section-badge">MATHEMATICAL RIGOR</div>
+          <h2>Biomedical Engineering Turned into Code</h2>
+          <p>
+            While other apps rely on naive linear assumptions, Masscience implements compartmental physiology (Forbes / P-Ratio), tissue inertia dampening, and deadband closed-loop control.
+          </p>
+          <p>
+            In extensive 180-day physiological benchmark tests against 6-compartment ground truth models, the v2.4 engine demonstrated a <strong>0.9942 trend correlation</strong> and <strong>100% minicut target precision</strong> across Monte Carlo seeds.
+          </p>
+          <div class="science-tags">
+            <span class="sc-tag">Rolling OLS (14d)</span>
+            <span class="sc-tag">Dynamic P-Ratio</span>
+            <span class="sc-tag">Forbes Tissue Inertia</span>
+            <span class="sc-tag">Closed-Loop Feedback</span>
+            <span class="sc-tag">Native i18n Subsystem</span>
+          </div>
+        </div>
+
+        <div class="science-code-card">
+          <div class="code-card-header">
+            <div class="mac-buttons"><span></span><span></span><span></span></div>
+            <span class="code-title">control.js • Algorithm v2.4</span>
+          </div>
+          <pre class="code-content"><code><span class="c-keyword">export function</span> <span class="c-func">planMinicutEnergyTarget</span>(params) {
+  <span class="c-keyword">const</span> { startingBf, currentBf, weightKg, tdee } = params;
+  
+  <span class="c-comment">// Fat mass to lose strictly to baseline BF</span>
+  <span class="c-keyword">const</span> fatMassDeltaKg = <span class="c-func">calcFatLossToBaseline</span>(currentBf, startingBf, weightKg);
+  <span class="c-keyword">const</span> totalDeficitNeeded = fatMassDeltaKg * <span class="c-num">7700</span>;
+  
+  <span class="c-comment">// Preferred 21-day horizon with STRICT 650 kcal cap</span>
+  <span class="c-keyword">let</span> dailyDeficit = Math.<span class="c-func">round</span>(totalDeficitNeeded / <span class="c-num">21</span>);
+  dailyDeficit = Math.<span class="c-func">min</span>(dailyDeficit, <span class="c-num">650</span>); <span class="c-comment">// NON-NEGOTIABLE</span>
+  
+  <span class="c-keyword">return</span> {
+    recommendedCalories: tdee - dailyDeficit,
+    deficitKcal: dailyDeficit,
+    projectedDays: Math.<span class="c-func">ceil</span>(totalDeficitNeeded / dailyDeficit)
+  };
+}</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ Section -->
+  <section class="faq-section" id="faq">
+    <div class="container faq-container">
+      <div class="section-badge">HAVE QUESTIONS?</div>
+      <h2 class="section-title text-center">Frequently Asked Questions</h2>
+      <p class="section-subtitle text-center">Everything you need to know about how Masscience works in real-world training.</p>
+
+      <div class="accordion-list">
+        <div class="accordion-item">
+          <button class="accordion-header" aria-expanded="false">
+            <span>Do I need to weigh all my food in the app?</span>
+            <span class="accordion-icon">+</span>
+          </button>
+          <div class="accordion-body">
+            <p>No! That is the fundamental premise of Masscience. Instead of weighing 150g rice and 120g chicken every 3 hours, you eat intuitively or by habit, log morning weigh-ins, and the algorithm tunes your energy balance automatically from physical drift.</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-header" aria-expanded="false">
+            <span>How does the app tell water from fat?</span>
+            <span class="accordion-icon">+</span>
+          </button>
+          <div class="accordion-body">
+            <p>Adipose and muscle tissue have metabolic inertia: it is biologically impossible for a human to synthesize 1.5 kg of pure fat in 24 hours. The robust regression filter identifies acute jumps as transient water, keeping your trend smooth and ignoring noise in TDEE calculations.</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-header" aria-expanded="false">
+            <span>Why is minicut deficit strictly capped at 650 kcal?</span>
+            <span class="accordion-icon">+</span>
+          </button>
+          <div class="accordion-body">
+            <p>Scientific research shows deficits larger than 750-1000 kcal/day in trained lifters dramatically increase lean muscle oxidation and downregulate thyroid function. Our 650 kcal hard ceiling ensures 99.9% muscle retention during the minicut phase.</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-header" aria-expanded="false">
+            <span>Does the application support multiple languages?</span>
+            <span class="accordion-icon">+</span>
+          </button>
+          <div class="accordion-body">
+            <p>Yes! Masscience includes first-class native internationalization for English, Portuguese (Brazil), and Spanish. Choose your preferred language during onboarding or toggle anytime in Settings.</p>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-header" aria-expanded="false">
+            <span>Are my body metrics sent to external cloud servers?</span>
+            <span class="accordion-icon">+</span>
+          </button>
+          <div class="accordion-body">
+            <p>No. Masscience is 100% offline-first. Your weight logs, body fat estimates, photos, and history reside strictly inside your device's local storage. You can export complete JSON backups anytime.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Final Call to Action -->
+  <section class="final-cta-section">
+    <div class="container text-center">
+      <div class="cta-box glow-card">
+        <h2>Ready to Build Your Best Physique Ever?</h2>
+        <p>Ditch the kitchen scale obsession. Let mathematics handle energy control while you focus on lifting heavy.</p>
+        <div class="cta-buttons">
+          <a href="https://github.com/wesleyyan-sb/masscience" target="_blank" rel="noopener noreferrer" class="btn btn-xl btn-primary glow-effect">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+            <span>Explore Masscience on GitHub</span>
+          </a>
+        </div>
+        <span class="cta-subtext">Open Source • Free to Fork &amp; Run Locally • No Account Required</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-brand">
+        <div class="brand-logo">
+          <div class="logo-symbol small">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+          </div>
+          <span class="logo-text">MASSCIENCE</span>
+        </div>
+        <p class="footer-desc">The adaptive, scientific ecosystem for continuous hypertrophy and body recomposition control.</p>
+      </div>
+
+      <div class="footer-links-grid">
+        <div class="footer-col">
+          <h4>Repository</h4>
+          <a href="https://github.com/wesleyyan-sb/masscience" target="_blank" rel="noopener noreferrer">GitHub Project</a>
+          <a href="https://github.com/wesleyyan-sb/masscience/releases" target="_blank" rel="noopener noreferrer">Releases &amp; Tags</a>
+          <a href="#simulator">Interactive Simulator</a>
+        </div>
+        <div class="footer-col">
+          <h4>Science &amp; Code</h4>
+          <a href="https://github.com/wesleyyan-sb/masscience/blob/main/ARCHITECTURE.md" target="_blank" rel="noopener noreferrer">Technical Architecture</a>
+          <a href="https://github.com/wesleyyan-sb/masscience/blob/main/ALGORITHM_CHANGELOG.md" target="_blank" rel="noopener noreferrer">Algorithm Changelog</a>
+          <a href="https://github.com/wesleyyan-sb/masscience/issues" target="_blank" rel="noopener noreferrer">Issues &amp; Discussions</a>
+        </div>
+        <div class="footer-col">
+          <h4>Transparency</h4>
+          <span class="footer-disclaimer-badge">Open Science</span>
+          <p class="disclaimer-text">Masscience is an algorithmic physiological modeling system and does not replace personalized medical or clinical nutrition guidance.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="container footer-bottom">
+      <p>&copy; 2026 Masscience. Engineered for natural, dedicated athletes.</p>
+      <div class="footer-version-badge">Engine v2.4.2 • Core UI 2.1.8</div>
+    </div>
+  </footer>
+
+  <!-- Main JavaScript File -->
+  <script src="main.js"></script>
+</body>
+</html>
