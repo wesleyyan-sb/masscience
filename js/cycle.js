@@ -370,9 +370,22 @@ export function addWeightMeasurement(state, weight, options = {}) {
   const measuredHistory = state.weightMeasurements.filter(m => !m.isEstimated && m.date !== date);
   const outlier = detectOutlier(measuredHistory, weight);
   const isSodiumSpike = !!options.isSodiumSpike;
+  const heavyLegDay = !!options.heavyLegDay;
+  const creatineLoading = !!options.creatineLoading;
+  const hormonalCycleStart = !!options.hormonalCycleStart;
+  const poorSleepStress = !!options.poorSleepStress;
+
+  const fluidTags = Array.isArray(options.fluidTags) ? [...options.fluidTags] : [];
+  if (isSodiumSpike && !fluidTags.includes('sodium_spike')) fluidTags.push('sodium_spike');
+  if (heavyLegDay && !fluidTags.includes('heavy_leg_day')) fluidTags.push('heavy_leg_day');
+  if (creatineLoading && !fluidTags.includes('creatine_loading')) fluidTags.push('creatine_loading');
+  if (hormonalCycleStart && !fluidTags.includes('hormonal_cycle')) fluidTags.push('hormonal_cycle');
+  if (poorSleepStress && !fluidTags.includes('poor_sleep_stress')) fluidTags.push('poor_sleep_stress');
+
+  const hasFluidTag = fluidTags.length > 0;
 
   let trendWeight = outlier.trendWeight;
-  if (isSodiumSpike && trendWeight == null) {
+  if (hasFluidTag && trendWeight == null) {
     const recent = measuredHistory.slice(-14).map(m => m.weight);
     const med = recent.length ? median(recent) : weight;
     trendWeight = round(med + (weight - med) * 0.15, 2);
@@ -382,9 +395,15 @@ export function addWeightMeasurement(state, weight, options = {}) {
     date,
     weight: Math.round(weight * 100) / 100,
     isEstimated: false,
-    isOutlier: outlier.isOutlier || isSodiumSpike,
-    outlierReason: isSodiumSpike ? 'sodium_spike' : (outlier.isOutlier ? 'water_spike' : null),
-    isSodiumSpike,
+    isOutlier: outlier.isOutlier || hasFluidTag,
+    outlierReason: hasFluidTag ? fluidTags[0] : (outlier.isOutlier ? 'water_spike' : null),
+    isSodiumSpike: fluidTags.includes('sodium_spike'),
+    heavyLegDay: fluidTags.includes('heavy_leg_day'),
+    creatineLoading: fluidTags.includes('creatine_loading'),
+    hormonalCycleStart: fluidTags.includes('hormonal_cycle'),
+    poorSleepStress: fluidTags.includes('poor_sleep_stress'),
+    hasFluidTag,
+    fluidTags,
     trendWeight: trendWeight != null ? trendWeight : Math.round(weight * 100) / 100,
     modifiedZ: outlier.modifiedZ,
   };

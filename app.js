@@ -32,17 +32,23 @@ import {
   formatWeight, formatHeight, formatCalories, formatLiters, escapeHtml,
   today, daysBetween, round, uuid,
 } from './js/utils.js';
+import { t, setLanguage, getLanguage, SUPPORTED_LANGUAGES } from './js/i18n.js';
 
 class MasscienceApp {
   constructor() {
     this.state = loadState();
     this.currentPage = 'dashboard';
+    this.activeEvolutionTab = 'progress';
+    this.activeStrategyTab = 'cycle';
+    this.activeMoreTab = 'history';
     this.onboardingStep = 0;
     this.computed = {};
     this.init();
   }
 
   init() {
+    const lang = this.state.settings?.language || 'en';
+    setLanguage(lang);
     this.applyTheme();
     this.bindGlobalEvents();
     if (!this.state.onboarded) {
@@ -189,6 +195,24 @@ class MasscienceApp {
       const nav = e.target.closest('[data-nav]');
       if (nav) { e.preventDefault(); this.navigate(nav.dataset.nav); return; }
 
+      const subnav = e.target.closest('[data-subnav]');
+      if (subnav) {
+        e.preventDefault();
+        const tab = subnav.dataset.subnav;
+        if (['progress', 'body'].includes(tab)) {
+          this.activeEvolutionTab = tab;
+          this.currentPage = 'evolution';
+        } else if (['cycle', 'nutrition'].includes(tab)) {
+          this.activeStrategyTab = tab;
+          this.currentPage = 'strategy';
+        } else if (['history', 'future', 'settings', 'about'].includes(tab)) {
+          this.activeMoreTab = tab;
+          this.currentPage = 'more';
+        }
+        this.render();
+        return;
+      }
+
       const action = e.target.closest('[data-action]');
       if (action) this.handleAction(action.dataset.action, action);
 
@@ -196,6 +220,19 @@ class MasscienceApp {
     });
 
     document.getElementById('app').addEventListener('change', (e) => {
+      if (e.target.id === 'onboarding-language-select') {
+        const lang = e.target.value;
+        this.onboardingData.language = lang;
+        setLanguage(lang);
+        this.renderOnboarding();
+        return;
+      }
+
+      const chipCheckbox = e.target.closest('.context-tag-chip input[type="checkbox"]');
+      if (chipCheckbox) {
+        chipCheckbox.closest('.context-tag-chip')?.classList.toggle('selected', chipCheckbox.checked);
+      }
+
       const radio = e.target.closest('input[type="radio"]');
       if (radio) {
         const name = radio.name;
@@ -239,7 +276,18 @@ class MasscienceApp {
   }
 
   navigate(page) {
-    this.currentPage = page;
+    if (['progress', 'body'].includes(page)) {
+      this.currentPage = 'evolution';
+      this.activeEvolutionTab = page;
+    } else if (['cycle', 'nutrition'].includes(page)) {
+      this.currentPage = 'strategy';
+      this.activeStrategyTab = page;
+    } else if (['history', 'future', 'settings', 'about', 'learn'].includes(page)) {
+      this.currentPage = 'more';
+      this.activeMoreTab = (page === 'learn' ? 'about' : page);
+    } else {
+      this.currentPage = page;
+    }
     this.render();
     window.scrollTo(0, 0);
   }
@@ -300,55 +348,68 @@ class MasscienceApp {
     document.getElementById('app').innerHTML = `
       <div class="landing">
         <div class="landing-content">
-          <h1 class="logo">MASSCIENCE</h1>
-          <p class="tagline">Lean bulk on autopilot.</p>
-          <p class="subtitle">Gain muscle. Control the rate.<br>Let your body provide the feedback.</p>
-          <button class="btn btn-primary btn-lg" data-action="start">Start</button>
-          <button class="btn btn-secondary" data-action="demo">Try Demo</button>
+          <h1 class="logo">${t('appName')}</h1>
+          <p class="tagline">${t('tagline')}</p>
+          <p class="subtitle">${t('taglineSubtitle')}</p>
+          <button class="btn btn-primary btn-lg" data-action="start">${t('btnStart')}</button>
+          <button class="btn btn-secondary" data-action="demo">${t('btnDemo')}</button>
         </div>
       </div>`;
   }
 
   showOnboarding() {
     this.onboardingStep = 0;
-    this.onboardingData = { units: 'metric' };
+    this.onboardingData = { units: 'metric', language: getLanguage() || 'en' };
     this.renderOnboarding();
   }
 
   renderOnboarding() {
-    const steps = ['About you', 'Your body', 'Your training', 'Your activity', 'Your goal', 'Your plan'];
+    const steps = [
+      t('onboarding_step_0'),
+      t('onboarding_step_1'),
+      t('onboarding_step_2'),
+      t('onboarding_step_3'),
+      t('onboarding_step_4'),
+      t('onboarding_step_5'),
+    ];
     const step = this.onboardingStep;
     const d = this.onboardingData;
 
     let content = '';
     if (step === 0) {
+      const curLang = d.language || getLanguage() || 'en';
       content = `
-        <div class="form-group"><label>Age</label><input type="number" name="age" value="${d.age || ''}" min="16" max="80" required></div>
-        <div class="form-group"><label>Sex</label>
+        <div class="form-group"><label>${t('onboarding_language')}</label>
+          <select name="language" id="onboarding-language-select">
+            ${SUPPORTED_LANGUAGES.map(l => `<option value="${l.id}" ${curLang === l.id ? 'selected' : ''}>${l.flag} ${l.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group"><label>${t('onboarding_age')}</label><input type="number" name="age" value="${d.age || ''}" min="16" max="80" required></div>
+        <div class="form-group"><label>${t('onboarding_sex')}</label>
           <select name="sex" required><option value="">Select</option>
-            <option value="male" ${d.sex === 'male' ? 'selected' : ''}>Male</option>
-            <option value="female" ${d.sex === 'female' ? 'selected' : ''}>Female</option>
+            <option value="male" ${d.sex === 'male' ? 'selected' : ''}>${t('onboarding_male')}</option>
+            <option value="female" ${d.sex === 'female' ? 'selected' : ''}>${t('onboarding_female')}</option>
           </select></div>
-        <div class="form-group"><label>Unit system</label>
-          <select name="units"><option value="metric" ${d.units === 'metric' ? 'selected' : ''}>Metric</option>
-            <option value="imperial" ${d.units === 'imperial' ? 'selected' : ''}>Imperial</option></select></div>`;
+        <div class="form-group"><label>${t('onboarding_units')}</label>
+          <select name="units"><option value="metric" ${d.units === 'metric' ? 'selected' : ''}>${t('onboarding_metric')}</option>
+            <option value="imperial" ${d.units === 'imperial' ? 'selected' : ''}>${t('onboarding_imperial')}</option></select></div>`;
     } else if (step === 1) {
       const isImp = d.units === 'imperial';
       content = `
-        <div class="form-group"><label>Height ${isImp ? '(in)' : '(cm)'}</label>
+        <div class="form-group"><label>${t('onboarding_height')} ${isImp ? '(in)' : '(cm)'}</label>
           <input type="number" name="height" value="${d.height || ''}" required step="0.1"></div>
-        <div class="form-group"><label>Current weight ${isImp ? '(lb)' : '(kg)'}</label>
+        <div class="form-group"><label>${t('onboarding_current_weight')} ${isImp ? '(lb)' : '(kg)'}</label>
           <input type="number" name="weight" value="${d.weight || ''}" required step="0.1"></div>
-        <div class="form-group"><label>Estimated body fat (%)</label>
+        <div class="form-group"><label>${t('onboarding_bf_estimate')}</label>
           <input type="number" name="bodyFat" value="${d.bodyFat || ''}" min="3" max="50" step="0.1" required>
-          <span class="hint">Your best estimate. This is not measured precisely.</span></div>`;
+          <span class="hint">${t('onboarding_bf_hint')}</span></div>`;
     } else if (step === 2) {
       const currentSessions = d.trainingSessions ? parseInt(d.trainingSessions) : 4;
       content = `
-        <div class="form-group"><label>Training experience (years)</label>
+        <div class="form-group"><label>${t('onboarding_training_years')}</label>
           <input type="number" name="trainingYears" value="${d.trainingYears || ''}" min="0" max="40" step="0.5" placeholder="e.g. 3" required></div>
         <div class="form-group">
-          <label>Resistance training sessions per week</label>
+          <label>${t('onboarding_sessions_week')}</label>
           <div class="sessions-selector-grid">
             ${[2, 3, 4, 5, 6].map(num => `
               <label class="session-chip ${currentSessions === num ? 'selected' : ''}">
@@ -359,17 +420,17 @@ class MasscienceApp {
             `).join('')}
           </div>
           <div class="custom-sessions-wrapper" style="margin-top: 0.6rem;">
-            <span class="hint">Or enter custom sessions:</span>
+            <span class="hint">${t('onboarding_custom_sessions')}</span>
             <input type="number" id="custom-sessions-input" min="1" max="14" placeholder="Other (e.g. 7)" value="${![2, 3, 4, 5, 6].includes(currentSessions) && d.trainingSessions ? d.trainingSessions : ''}" style="width: 120px; display: inline-block; margin-left: 0.5rem; padding: 0.4rem 0.6rem; font-size: 0.85rem;">
           </div>
         </div>`;
     } else if (step === 3) {
       const levels = [
-        ['sedentary', 'Sedentary', 'Desk job, little to no exercise outside training'],
-        ['lightly_active', 'Lightly Active', 'Light daily activity or 1–3 days of light exercise/walking'],
-        ['moderately_active', 'Moderately Active', 'Regular daily movement or 3–5 days active per week'],
-        ['very_active', 'Very Active', 'Physical job or hard exercise 6–7 days per week'],
-        ['extremely_active', 'Extremely Active', 'Heavy physical labor + heavy daily training'],
+        ['sedentary', t('onboarding_sedentary'), t('onboarding_sedentary_desc')],
+        ['lightly_active', t('onboarding_light'), t('onboarding_light_desc')],
+        ['moderately_active', t('onboarding_moderate'), t('onboarding_moderate_desc')],
+        ['very_active', t('onboarding_very'), t('onboarding_very_desc')],
+        ['extremely_active', t('onboarding_extreme'), t('onboarding_extreme_desc')],
       ];
       content = levels.map(([val, title, desc]) => `
         <label class="radio-card ${d.activityLevel === val ? 'selected' : ''}">
@@ -388,15 +449,15 @@ class MasscienceApp {
       const plan = buildInitialPlan(profile, { bulkWeeks: 10, minicutWeeks: 3 });
       content = `
         <div class="plan-summary">
-          <h3>Your Masscience Plan</h3>
+          <h3>${t('onboarding_plan_summary')}</h3>
           <div class="plan-grid">
             <div class="plan-item"><span class="plan-label">Lean Bulk</span><span class="plan-value">10 weeks</span></div>
             <div class="plan-item"><span class="plan-label">Minicut</span><span class="plan-value">3 weeks</span></div>
-            <div class="plan-item"><span class="plan-label">Starting calories</span><span class="plan-value">${formatCalories(plan.bulkCalories)}</span></div>
+            <div class="plan-item"><span class="plan-label">${t('onboarding_starting_cals')}</span><span class="plan-value">${formatCalories(plan.bulkCalories)}</span></div>
             <div class="plan-item"><span class="plan-label">Target gain</span><span class="plan-value">~${plan.gainRange.targetPercent}% BW/wk (${plan.gainRange.min}–${plan.gainRange.max} kg/wk)</span></div>
             <div class="plan-item"><span class="plan-label">Max projected BF</span><span class="plan-value">~${plan.maxBf}%</span></div>
-            <div class="plan-item"><span class="plan-label">Protein</span><span class="plan-value">${plan.macros.protein} g</span></div>
-            <div class="plan-item"><span class="plan-label">Est. TDEE</span><span class="plan-value">${formatCalories(plan.tdee)}</span></div>
+            <div class="plan-item"><span class="plan-label">${t('protein_label')}</span><span class="plan-value">${plan.macros.protein} g</span></div>
+            <div class="plan-item"><span class="plan-label">${t('onboarding_est_tdee')}</span><span class="plan-value">${formatCalories(plan.tdee)}</span></div>
             <div class="plan-item"><span class="plan-label">Est. FFMI</span><span class="plan-value">${plan.ffmi}</span></div>
           </div>
           <p class="hint">All body-composition values are estimates.</p>
@@ -412,10 +473,10 @@ class MasscienceApp {
         </div>
         <form id="onboarding-form" class="onboarding-form">${content}</form>
         <div class="onboarding-actions">
-          ${step > 0 ? '<button type="button" class="btn btn-ghost" data-action="onboarding-back">Back</button>' : '<span></span>'}
+          ${step > 0 ? `<button type="button" class="btn btn-ghost" data-action="onboarding-back">${t('btnBack')}</button>` : '<span></span>'}
           ${step < steps.length - 1
-            ? '<button type="button" class="btn btn-primary" data-action="onboarding-next">Continue</button>'
-            : '<button type="button" class="btn btn-primary btn-lg" data-action="start-calibration">Start Calibration</button>'}
+            ? `<button type="button" class="btn btn-primary" data-action="onboarding-next">${t('btnNext')}</button>`
+            : `<button type="button" class="btn btn-primary btn-lg" data-action="start-calibration">${t('onboarding_start_calibration')}</button>`}
         </div>
       </div>`;
   }
@@ -472,7 +533,13 @@ class MasscienceApp {
     const errors = validateProfile(profile);
     if (errors.length) { alert(errors.join('\n')); this.onboardingStep = 1; this.renderOnboarding(); return; }
 
-    const settings = { ...this.state.settings, units: this.onboardingData.units || 'metric' };
+    const chosenLang = this.onboardingData.language || this.state.settings?.language || 'en';
+    const settings = {
+      ...this.state.settings,
+      units: this.onboardingData.units || 'metric',
+      language: chosenLang,
+    };
+    setLanguage(chosenLang);
     const plan = buildInitialPlan(profile, settings);
     const cycle = createCycle(profile, settings, plan);
 
@@ -511,7 +578,18 @@ class MasscienceApp {
     }
 
     const isSodiumSpike = form.isSodiumSpike ? form.isSodiumSpike.checked : false;
-    this.state = addWeightMeasurement(this.state, weightKg, { isSodiumSpike });
+    const heavyLegDay = form.heavyLegDay ? form.heavyLegDay.checked : false;
+    const creatineLoading = form.creatineLoading ? form.creatineLoading.checked : false;
+    const hormonalCycleStart = form.hormonalCycleStart ? form.hormonalCycleStart.checked : false;
+    const poorSleepStress = form.poorSleepStress ? form.poorSleepStress.checked : false;
+
+    this.state = addWeightMeasurement(this.state, weightKg, {
+      isSodiumSpike,
+      heavyLegDay,
+      creatineLoading,
+      hormonalCycleStart,
+      poorSleepStress,
+    });
     saveState(this.state);
     this.recompute();
     this.render();
@@ -638,32 +716,74 @@ class MasscienceApp {
     return `<div class="status-badge ${s.class}"><span>${s.icon}</span> ${s.label}</div>`;
   }
 
+  getActiveTabId() {
+    if (this.currentPage === 'dashboard') return 'dashboard';
+    if (['evolution', 'progress', 'body'].includes(this.currentPage)) return 'evolution';
+    if (['strategy', 'cycle', 'nutrition'].includes(this.currentPage)) return 'strategy';
+    return 'more';
+  }
+
+  renderEvolutionPage(forceTab) {
+    if (forceTab) this.activeEvolutionTab = forceTab;
+    const tab = this.activeEvolutionTab;
+    return `
+      <div class="segmented-nav">
+        <button class="segmented-btn ${tab === 'progress' ? 'active' : ''}" data-subnav="progress">${t('tab_progress')}</button>
+        <button class="segmented-btn ${tab === 'body' ? 'active' : ''}" data-subnav="body">${t('tab_body')}</button>
+      </div>
+      ${tab === 'body' ? this.renderBodyPage() : this.renderProgress()}`;
+  }
+
+  renderStrategyPage(forceTab) {
+    if (forceTab) this.activeStrategyTab = forceTab;
+    const tab = this.activeStrategyTab;
+    return `
+      <div class="segmented-nav">
+        <button class="segmented-btn ${tab === 'cycle' ? 'active' : ''}" data-subnav="cycle">${t('tab_cycle')}</button>
+        <button class="segmented-btn ${tab === 'nutrition' ? 'active' : ''}" data-subnav="nutrition">${t('tab_nutrition')}</button>
+      </div>
+      ${tab === 'nutrition' ? this.renderNutritionPage() : this.renderCyclePage()}`;
+  }
+
+  renderMorePage(forceTab) {
+    if (forceTab) this.activeMoreTab = forceTab;
+    const tab = this.activeMoreTab;
+    return `
+      <div class="segmented-nav">
+        <button class="segmented-btn ${tab === 'history' ? 'active' : ''}" data-subnav="history">${t('tab_history')}</button>
+        <button class="segmented-btn ${tab === 'future' ? 'active' : ''}" data-subnav="future">${t('tab_future')}</button>
+        <button class="segmented-btn ${tab === 'settings' ? 'active' : ''}" data-subnav="settings">${t('tab_settings')}</button>
+        <button class="segmented-btn ${tab === 'about' ? 'active' : ''}" data-subnav="about">${t('tab_about')}</button>
+      </div>
+      ${tab === 'future' ? this.renderFuturePage() : (tab === 'settings' ? this.renderSettingsPage() : (tab === 'about' ? this.renderAboutPage() : this.renderHistoryPage()))}`;
+  }
+
   render() {
     if (!this.state.onboarded) return;
 
     const pages = {
       dashboard: () => this.renderDashboard(),
-      progress: () => this.renderProgress(),
-      cycle: () => this.renderCyclePage(),
-      body: () => this.renderBodyPage(),
-      nutrition: () => this.renderNutritionPage(),
-      future: () => this.renderFuturePage(),
-      history: () => this.renderHistoryPage(),
-      settings: () => this.renderSettingsPage(),
-      about: () => this.renderAboutPage(),
-      learn: () => this.renderLearnPage(),
+      evolution: () => this.renderEvolutionPage(),
+      strategy: () => this.renderStrategyPage(),
+      more: () => this.renderMorePage(),
+      progress: () => this.renderEvolutionPage('progress'),
+      body: () => this.renderEvolutionPage('body'),
+      cycle: () => this.renderStrategyPage('cycle'),
+      nutrition: () => this.renderStrategyPage('nutrition'),
+      future: () => this.renderMorePage('future'),
+      history: () => this.renderMorePage('history'),
+      settings: () => this.renderMorePage('settings'),
+      about: () => this.renderMorePage('about'),
+      learn: () => this.renderMorePage('about'),
     };
 
+    const activeTab = this.getActiveTabId();
+
     const navItems = [
-      ['dashboard', 'Home', '⌂'],
-      ['progress', 'Progress', '📈'],
-      ['cycle', 'Cycle', '🔄'],
-      ['body', 'Body', '📏'],
-      ['nutrition', 'Nutrition', '🍽'],
-      ['future', 'Future', '🔮'],
-      ['history', 'History', '📋'],
-      ['settings', 'Settings', '⚙'],
-      ['about', 'About', 'ℹ'],
+      ['dashboard', t('nav_today'), '⌂'],
+      ['evolution', t('nav_evolution'), '📈'],
+      ['strategy', t('nav_strategy'), '🔄'],
+      ['more', t('nav_more'), '⚙'],
     ];
 
     document.getElementById('app').innerHTML = `
@@ -675,7 +795,7 @@ class MasscienceApp {
         <main class="app-main" id="main-content">${(pages[this.currentPage] || pages.dashboard)()}</main>
         <nav class="bottom-nav" aria-label="Main navigation">
           ${navItems.map(([id, label, icon]) => `
-            <a href="#" data-nav="${id}" class="nav-item ${this.currentPage === id ? 'active' : ''}" aria-label="${label}">
+            <a href="#" data-nav="${id}" class="nav-item ${activeTab === id ? 'active' : ''}" aria-label="${label}">
               <span class="nav-icon">${icon}</span><span class="nav-label">${label}</span>
             </a>`).join('')}
         </nav>
@@ -690,6 +810,39 @@ class MasscienceApp {
     if (!reminders.length) return '';
     return `<div class="reminders">${reminders.slice(0, 2).map(r =>
       `<span class="reminder">${r.icon} ${r.text}</span>`).join('')}</div>`;
+  }
+
+  renderContextTags(formSuffix = '') {
+    return `
+      <div class="context-tags-container">
+        <div class="context-tags-header">
+          <span>💧</span>
+          <strong>${t('context_tags_title')}</strong>
+        </div>
+        <p class="context-tags-hint">${t('context_tags_hint')}</p>
+        <div class="context-tags-grid">
+          <label class="context-tag-chip">
+            <input type="checkbox" name="isSodiumSpike" id="sodium-spike-checkbox${formSuffix}">
+            <span>${t('tag_sodium_spike')}</span>
+          </label>
+          <label class="context-tag-chip">
+            <input type="checkbox" name="heavyLegDay" id="heavy-leg-checkbox${formSuffix}">
+            <span>${t('tag_heavy_leg_day')}</span>
+          </label>
+          <label class="context-tag-chip">
+            <input type="checkbox" name="creatineLoading" id="creatine-checkbox${formSuffix}">
+            <span>${t('tag_creatine_loading')}</span>
+          </label>
+          <label class="context-tag-chip">
+            <input type="checkbox" name="hormonalCycleStart" id="hormonal-checkbox${formSuffix}">
+            <span>${t('tag_hormonal_cycle')}</span>
+          </label>
+          <label class="context-tag-chip">
+            <input type="checkbox" name="poorSleepStress" id="poor-sleep-checkbox${formSuffix}">
+            <span>${t('tag_poor_sleep_stress')}</span>
+          </label>
+        </div>
+      </div>`;
   }
 
   renderDashboard() {
@@ -775,16 +928,13 @@ class MasscienceApp {
 
       ${shouldWeighToday(state) ? `
       <div class="card">
-        <h3>Today's Weigh-in</h3>
+        <h3>${t('card_weigh_in_title')}</h3>
         <form id="weigh-in-form">
           <div class="form-row">
             <input type="number" name="weight" step="0.1" placeholder="Weight (${units === 'imperial' ? 'lb' : 'kg'})" required>
-            <button type="submit" class="btn btn-primary">Log</button>
+            <button type="submit" class="btn btn-primary">${t('btn_save_weigh_in')}</button>
           </div>
-          <label class="sodium-toggle-label" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.65rem; font-size: 0.84rem; color: var(--text-secondary); cursor: pointer;">
-            <input type="checkbox" name="isSodiumSpike" id="sodium-spike-checkbox" style="width: auto; cursor: pointer; accent-color: var(--accent);">
-            <span>🧂 Refeição livre / Sódio alto ontem (amortecer retenção hídrica)</span>
-          </label>
+          ${this.renderContextTags()}
         </form>
         ${trend?.measured != null ? `<p class="hint">Last measured: ${formatWeight(trend.measured, units)} · Trend: ${formatWeight(trend.trend, units)}</p>` : ''}
       </div>` : `
@@ -796,12 +946,9 @@ class MasscienceApp {
           <form id="weigh-in-form" style="margin-top: 0.5rem;">
             <div class="form-row">
               <input type="number" name="weight" step="0.1" placeholder="Weight (${units === 'imperial' ? 'lb' : 'kg'})" required>
-              <button type="submit" class="btn btn-primary">Log</button>
+              <button type="submit" class="btn btn-primary">${t('btn_save_weigh_in')}</button>
             </div>
-            <label class="sodium-toggle-label" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.65rem; font-size: 0.84rem; color: var(--text-secondary); cursor: pointer;">
-              <input type="checkbox" name="isSodiumSpike" id="sodium-spike-checkbox-extra" style="width: auto; cursor: pointer; accent-color: var(--accent);">
-              <span>🧂 Refeição livre / Sódio alto ontem (amortecer retenção hídrica)</span>
-            </label>
+            ${this.renderContextTags('-extra')}
           </form>
         </details>
       </div>`}
@@ -1136,8 +1283,15 @@ class MasscienceApp {
           ${state.weightMeasurements.filter(m => !m.isEstimated).slice(-15).reverse().map(m => `
             <div class="history-entry" style="display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0.65rem; background: rgba(255,255,255,0.02); border-radius: var(--radius); font-size: 0.85rem;">
               <span><strong>${m.date}</strong>: ${m.weight} kg</span>
-              <div>
-                ${m.isSodiumSpike ? '<span class="status-badge status-yellow" style="font-size: 0.72rem; padding: 2px 6px;">🧂 Refeição livre / Sódio</span>' : (m.isOutlier ? '<span class="status-badge status-neutral" style="font-size: 0.72rem; padding: 2px 6px;">💧 Retenção</span>' : '<span style="color: var(--text-muted); font-size: 0.75rem;">Normal</span>')}
+              <div style="display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end;">
+                ${m.fluidTags && m.fluidTags.length ? m.fluidTags.map(tag => {
+                  if (tag === 'sodium_spike') return '<span class="badge-tag badge-tag-sodium">🧂 Sódio</span>';
+                  if (tag === 'heavy_leg_day') return '<span class="badge-tag badge-tag-doms">🏋️ DOMS</span>';
+                  if (tag === 'creatine_loading') return '<span class="badge-tag badge-tag-creatine">💊 Creatina</span>';
+                  if (tag === 'hormonal_cycle') return '<span class="badge-tag badge-tag-creatine">💉 Hormonal</span>';
+                  if (tag === 'poor_sleep_stress') return '<span class="badge-tag badge-tag-sleep">💤 Sono</span>';
+                  return '<span class="badge-tag">💧 Fluido</span>';
+                }).join('') : (m.isSodiumSpike ? '<span class="badge-tag badge-tag-sodium">🧂 Sódio</span>' : (m.isOutlier ? '<span class="status-badge status-neutral" style="font-size: 0.72rem; padding: 2px 6px;">💧 Retenção</span>' : '<span style="color: var(--text-muted); font-size: 0.75rem;">Normal</span>'))}
               </div>
             </div>
           `).join('') || '<p class="hint">No measurements recorded yet.</p>'}
@@ -1194,6 +1348,10 @@ class MasscienceApp {
       </div>
       <div class="card">
         <h3>Preferences</h3>
+        <div class="form-group"><label>${t('settings_language')}</label>
+          <select id="language-select" onchange="window.masscience.setLanguage(this.value)">
+            ${SUPPORTED_LANGUAGES.map(l => `<option value="${l.id}" ${(state.settings.language || getLanguage()) === l.id ? 'selected' : ''}>${l.flag} ${l.name}</option>`).join('')}
+          </select></div>
         <div class="form-group"><label>Theme</label>
           <select id="theme-select" onchange="window.masscience.setTheme(this.value)">
             <option value="dark" ${state.settings.theme === 'dark' ? 'selected' : ''}>Dark</option>
@@ -1327,6 +1485,13 @@ class MasscienceApp {
     this.state.settings.theme = theme;
     saveState(this.state);
     this.applyTheme();
+  }
+
+  setLanguage(lang) {
+    this.state.settings.language = lang;
+    setLanguage(lang);
+    saveState(this.state);
+    this.render();
   }
 
   setUnits(units) {

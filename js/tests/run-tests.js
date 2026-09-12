@@ -14,6 +14,7 @@ import { estimateAdaptiveTDEE } from '../adaptive.js';
 import { runMonteCarloProjection } from '../projection.js';
 import { ALGORITHM_VERSION, PHASE } from '../constants.js';
 import { run180DaySimulation, createSeededPRNG, createNormalPRNG } from './simulated-user-scenario.js';
+import { t, setLanguage, getLanguage, SUPPORTED_LANGUAGES } from '../i18n.js';
 
 const pkgVersion = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 const results = [];
@@ -447,6 +448,85 @@ test('Refeição livre / Pico de sódio: preserva peso medido, amortece tendênc
   // 4. Trend processing downweights the spike
   const trend = processWeightData(updatedState.weightMeasurements, startDate);
   return trend.latest && Math.abs(trend.latest.trend - 70.2) < 0.4;
+});
+
+test('i18n: EN, PT e ES fornecem traduções completas, interpolação e chave reativa', () => {
+  // Test default language (en)
+  setLanguage('en');
+  if (getLanguage() !== 'en') return false;
+  if (t('nav_today') !== 'Today') return false;
+  if (t('nav_evolution') !== 'Evolution') return false;
+
+  // Test Portuguese (pt)
+  setLanguage('pt');
+  if (getLanguage() !== 'pt') return false;
+  if (t('nav_today') !== 'Hoje') return false;
+  if (t('nav_evolution') !== 'Evolução') return false;
+  if (t('nav_strategy') !== 'Estratégia') return false;
+  if (t('tag_heavy_leg_day').indexOf('pernas') === -1) return false;
+
+  // Test Spanish (es)
+  setLanguage('es');
+  if (getLanguage() !== 'es') return false;
+  if (t('nav_today') !== 'Hoy') return false;
+  if (t('nav_evolution') !== 'Evolución') return false;
+  if (t('nav_strategy') !== 'Estrategia') return false;
+  if (t('tag_heavy_leg_day').indexOf('piernas') === -1) return false;
+
+  // Test parameter interpolation
+  const interpolated = t('minicut_objective', { targetBf: 9.5 });
+  if (interpolated.indexOf('9.5%') === -1) return false;
+
+  // Reset back to English
+  setLanguage('en');
+  return true;
+});
+
+test('Tags fisiológicas: Treino pesado de perna (DOMS), creatina, ciclo hormonal e sono amortecem retenção e protegem a taxa', () => {
+  const startDate = '2026-03-01';
+  const baseState = {
+    currentCycle: { startDate, phaseStartDate: startDate, initialWeight: 75 },
+    weightMeasurements: [
+      { date: '2026-03-01', weight: 75.0, isEstimated: false },
+      { date: '2026-03-02', weight: 75.1, isEstimated: false },
+      { date: '2026-03-03', weight: 75.0, isEstimated: false },
+      { date: '2026-03-04', weight: 75.2, isEstimated: false },
+    ],
+  };
+
+  // 1. Test heavy leg day (DOMS)
+  const domsState = addWeightMeasurement(baseState, 76.5, { date: '2026-03-05', heavyLegDay: true });
+  const domsEntry = domsState.weightMeasurements.find(m => m.date === '2026-03-05');
+  if (domsEntry.weight !== 76.5) return false; // Raw scale weight preserved
+  if (!domsEntry.heavyLegDay || !domsEntry.hasFluidTag || !domsEntry.isOutlier) return false;
+  if (domsEntry.trendWeight > 75.5) return false; // Damped
+
+  // 2. Test multi-tag (Creatine + Sodium spike)
+  const multiState = addWeightMeasurement(baseState, 76.8, {
+    date: '2026-03-05',
+    isSodiumSpike: true,
+    creatineLoading: true,
+  });
+  const multiEntry = multiState.weightMeasurements.find(m => m.date === '2026-03-05');
+  if (multiEntry.weight !== 76.8) return false;
+  if (!multiEntry.creatineLoading || !multiEntry.isSodiumSpike || !multiEntry.hasFluidTag) return false;
+  if (!multiEntry.fluidTags.includes('creatine_loading') || !multiEntry.fluidTags.includes('sodium_spike')) return false;
+
+  // 3. Test hormonal cycle + poor sleep
+  const hormoneState = addWeightMeasurement(baseState, 77.2, {
+    date: '2026-03-05',
+    hormonalCycleStart: true,
+    poorSleepStress: true,
+  });
+  const hormoneEntry = hormoneState.weightMeasurements.find(m => m.date === '2026-03-05');
+  if (hormoneEntry.weight !== 77.2) return false;
+  if (!hormoneEntry.hormonalCycleStart || !hormoneEntry.poorSleepStress) return false;
+
+  // 4. Verify trend engine downweights flagged entries and preserves rate stability
+  const trendResult = processWeightData(domsState.weightMeasurements, startDate);
+  if (!trendResult.latest) return false;
+  // Trend should be near ~75.2 kg, not pulled up to 76.5 kg
+  return Math.abs(trendResult.latest.trend - 75.2) < 0.4;
 });
 
 const passed = results.filter(r => r.pass).length;

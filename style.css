@@ -154,36 +154,68 @@ body {
   height: calc(var(--nav-height) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   display: flex;
-  background: var(--bg-secondary);
+  background: rgba(22, 27, 34, 0.95);
   border-top: 1px solid var(--border);
   z-index: 100;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .nav-item {
   flex: 1;
-  min-width: 56px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 3px;
   padding: 0.5rem 0.25rem;
   color: var(--text-muted);
   text-decoration: none;
-  font-size: 0.65rem;
-  transition: color var(--transition);
+  font-size: 0.72rem;
+  font-weight: 500;
+  transition: all var(--transition);
   -webkit-tap-highlight-color: transparent;
+  position: relative;
 }
 
-.nav-item.active { color: var(--accent); }
-.nav-item:hover, .nav-item:focus-visible { color: var(--text-primary); outline: none; }
-.nav-icon { font-size: 1.1rem; }
+.nav-item.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.nav-item.active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 0 0 2px 2px;
+  box-shadow: 0 0 8px var(--accent);
+}
+
+.nav-item:hover, .nav-item:focus-visible {
+  color: var(--text-primary);
+  outline: none;
+}
+
+.nav-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
 
 @media (min-width: 768px) {
-  .bottom-nav { max-width: 640px; left: 50%; transform: translateX(-50%); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
-  .nav-label { font-size: 0.7rem; }
+  .bottom-nav {
+    max-width: 640px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+  .nav-label { font-size: 0.75rem; }
 }
 
 /* Cards */
@@ -835,3 +867,147 @@ body {
   .hero-weight { font-size: 3rem; }
   .macro-grid { grid-template-columns: repeat(5, 1fr); }
 }
+
+/* Segmented Sub-Navigation */
+.segmented-nav {
+  display: flex;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px;
+  margin-bottom: 1.25rem;
+  gap: 4px;
+}
+
+.segmented-btn {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.segmented-btn.active {
+  background: var(--bg-elevated);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.segmented-btn:hover:not(.active) {
+  color: var(--text-primary);
+}
+
+/* Context Tags in Weigh-In Form */
+.context-tags-container {
+  margin: 1rem 0;
+  padding: 0.85rem;
+  background: rgba(22, 27, 34, 0.6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.context-tags-header {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.35rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.context-tags-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+  line-height: 1.4;
+}
+
+.context-tags-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.context-tag-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.85rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  transition: all var(--transition);
+  user-select: none;
+}
+
+.context-tag-chip input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.context-tag-chip:hover {
+  background: var(--bg-elevated);
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.context-tag-chip.selected {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: var(--accent);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* History Badges for Fluid Tags */
+.badge-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.45rem;
+  background: rgba(56, 189, 248, 0.12);
+  color: var(--accent);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  margin-left: 0.25rem;
+  white-space: nowrap;
+}
+
+.badge-tag-sodium {
+  background: rgba(251, 191, 36, 0.12);
+  color: var(--yellow);
+  border-color: rgba(251, 191, 36, 0.25);
+}
+
+.badge-tag-doms {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--red);
+  border-color: rgba(248, 113, 113, 0.25);
+}
+
+.badge-tag-creatine {
+  background: rgba(168, 85, 247, 0.12);
+  color: #c084fc;
+  border-color: rgba(168, 85, 247, 0.25);
+}
+
+.badge-tag-sleep {
+  background: rgba(148, 163, 184, 0.15);
+  color: #cbd5e1;
+  border-color: rgba(148, 163, 184, 0.25);
+}
+

@@ -17,6 +17,7 @@ export function createDefaultState() {
     settings: {
       units: 'metric',
       theme: 'dark',
+      language: 'en',
       bulkWeeks: 10,
       minicutWeeks: 3,
       notifications: true,
